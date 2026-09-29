@@ -1,0 +1,20 @@
+# Unit minima: Docker hace el trabajo, systemd solo garantiza que el stack
+# suba tras un corte de luz aunque alguien lo haya bajado a mano.
+# Instalar en /etc/systemd/system/ecomap.service y habilitar con:
+#   sudo systemctl enable --now ecomap
+
+[Unit]
+Description=Eco-Map stack
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/ecomap
+ExecStart=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d
+ExecStop=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.pi.yml down
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

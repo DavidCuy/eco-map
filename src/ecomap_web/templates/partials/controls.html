@@ -1,0 +1,28 @@
+{# Fragmento intercambiado por HTMX tras cada accion. Tambien se renderiza
+   embebido en el dashboard en la primera carga. #}
+<div class="grid">
+  <button
+    class="{{ 'contrast' if status.blackout else 'secondary' }}"
+    hx-post="/api/system/blackout"
+    hx-ext="json-enc"
+    hx-vals='{"on": {{ 'false' if status.blackout else 'true' }}}'
+    hx-target="#controls"
+    hx-swap="innerHTML">
+    {{ 'Salir de blackout' if status.blackout else 'Blackout' }}
+  </button>
+
+  {% for name, label in [('grid', 'Patron grilla'), ('white', 'Blanco'), ('off', 'Sin patron')] %}
+  <button
+    class="{{ 'primary' if status.pattern == name else 'outline secondary' }}"
+    hx-post="/api/system/testpattern"
+    hx-ext="json-enc"
+    hx-vals='{"pattern": "{{ name }}"}'
+    hx-target="#controls"
+    hx-swap="innerHTML">
+    {{ label }}
+  </button>
+  {% endfor %}
+</div>
+{% if not status.render_up %}
+<small class="muted">El render no esta conectado: el cambio queda guardado y se aplica al reconectar.</small>
+{% endif %}

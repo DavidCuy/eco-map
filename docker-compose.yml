@@ -1,0 +1,58 @@
+# Compose base: servicios y volumenes. No asume hardware.
+#   desarrollo -> docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#   Raspberry  -> docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d
+
+x-common: &common
+  image: ecomap:latest
+  build:
+    context: .
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  render:
+    <<: *common
+    command: ecomap-render
+    environment:
+      ECOMAP_BUS: /run/ecomap/bus.sock
+      ECOMAP_EFFECTS: /effects
+      ECOMAP_MEDIA: /media
+      ECOMAP_RENDER_MODE: headless
+    volumes:
+      - ecomap-effects:/effects:ro
+      - ecomap-media:/media:ro
+      - ecomap-bus:/run/ecomap
+
+  web:
+    <<: *common
+    command: ecomap-web
+    depends_on:
+      - render
+    environment:
+      ECOMAP_DB: /data/ecomap.db
+      ECOMAP_BUS: /run/ecomap/bus.sock
+      ECOMAP_EFFECTS: /effects
+      ECOMAP_MEDIA: /media
+    volumes:
+      - ecomap-data:/data
+      - ecomap-effects:/effects
+      - ecomap-media:/media
+      - ecomap-bus:/run/ecomap
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  # Separados a proposito: la configuracion, el catalogo de efectos y los
+  # assets pesados tienen ciclos de vida distintos (ADR-011).
+  ecomap-data:
+  ecomap-effects:
+  ecomap-media:
+  ecomap-bus:

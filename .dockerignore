@@ -1,0 +1,14 @@
+.git
+.github
+.venv
+.local_knowledge
+data
+media
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+tests
+docker-compose*.yml
+*.md
+!README.md

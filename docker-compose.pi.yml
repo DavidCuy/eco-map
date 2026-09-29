@@ -1,0 +1,35 @@
+# Raspberry Pi en produccion. Requiere:
+#   - dtoverlay=vc4-kms-v3d en /boot/firmware/config.txt
+#   - el usuario del servicio en los grupos video y render
+#   - NetworkManager y avahi-daemon en el host
+# Ver .local_knowledge/05-Operacion/Despliegue-Raspberry.md
+
+services:
+  render:
+    environment:
+      ECOMAP_RENDER_MODE: kms
+      ECOMAP_WIDTH: "1920"
+      ECOMAP_HEIGHT: "1080"
+      ECOMAP_FPS: "60"
+      # A partir del Hito 4: v4l2:///dev/video0
+      ECOMAP_CAMERA: "fake://"
+    devices:
+      - /dev/dri:/dev/dri
+      # Ruta estable de la webcam: el indice /dev/videoN cambia entre arranques.
+      # Ajustar al id real que muestre `ls -l /dev/v4l/by-id/` (Hito 4).
+      # - /dev/v4l/by-id/usb-XXXX-video-index0:/dev/video0
+    group_add:
+      - video
+      - render
+
+  web:
+    # host network para que mDNS y la configuracion de wifi funcionen (Hito 3).
+    network_mode: host
+    volumes:
+      - ecomap-data:/data
+      - ecomap-effects:/effects
+      - ecomap-media:/media
+      - ecomap-bus:/run/ecomap
+      # Control de NetworkManager desde el contenedor web. Es la mayor
+      # elevacion de privilegio del diseno; queda acotada a este servicio.
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
