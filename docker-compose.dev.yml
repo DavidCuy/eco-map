@@ -1,0 +1,37 @@
+# Desarrollo en escritorio: sin proyector, sin Pi, sin camara.
+# El render dibuja por CPU (llvmpipe) y publica el resultado como MJPEG.
+
+services:
+  render:
+    build:
+      context: .
+    command: ecomap-render
+    environment:
+      ECOMAP_RENDER_MODE: headless
+      ECOMAP_GL_BACKEND: egl
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      # Resolucion baja: llvmpipe no da 1080p60 y aca solo se valida logica.
+      ECOMAP_WIDTH: "960"
+      ECOMAP_HEIGHT: "540"
+      ECOMAP_FPS: "30"
+      ECOMAP_PREVIEW_PORT: "8001"
+      ECOMAP_CAMERA: "fake://"
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./src:/app/src
+      - ./effects:/effects:ro
+      - ./media:/media:ro
+
+  web:
+    build:
+      context: .
+    environment:
+      ECOMAP_RELOAD: "1"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+      - ./migrations:/app/migrations:ro
+      - ./effects:/effects
+      - ./media:/media
