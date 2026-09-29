@@ -1,0 +1,9 @@
+{# Estado en texto plano, para clientes HTMX sin WebSocket (o para depurar). #}
+<div class="grid metrics">
+  <div><small>render</small><h3>{{ 'en linea' if status.render_up else 'offline' }}</h3></div>
+  <div><small>fps</small><h3>{{ '%.1f'|format(status.fps) }}</h3></div>
+  <div><small>frame</small><h3>{{ '%.1f'|format(status.frame_ms) }} ms</h3></div>
+  <div><small>temperatura</small>
+    <h3>{{ '%.1f °C'|format(status.temp) if status.temp is not none else 'n/d' }}</h3>
+  </div>
+</div>

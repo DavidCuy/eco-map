@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div x-data="dashboard({{ status.model_dump_json() }})" x-init="connect()">
+
+  <article>
+    <header>
+      <span class="dot" :class="status.render_up ? 'dot-up' : 'dot-down'"></span>
+      <strong x-text="status.render_up ? 'Render en linea' : 'Render offline'"></strong>
+      <small x-show="!ws" class="muted"> · sin telemetria en vivo</small>
+    </header>
+
+    <div class="grid metrics">
+      <div>
+        <small>fps</small>
+        <h3 x-text="status.fps.toFixed(1)">—</h3>
+      </div>
+      <div>
+        <small>frame</small>
+        <h3><span x-text="status.frame_ms.toFixed(1)">—</span> ms</h3>
+        <small class="muted">pico <span x-text="status.frame_ms_max.toFixed(1)">—</span> ms</small>
+      </div>
+      <div>
+        <small>temperatura</small>
+        <h3 x-text="status.temp === null ? 'n/d' : status.temp.toFixed(1) + ' °C'">—</h3>
+      </div>
+      <div>
+        <small>escena</small>
+        <h3 x-text="status.scene_id === null ? 'ninguna' : ('#' + status.scene_id)">—</h3>
+      </div>
+    </div>
+  </article>
+
+  <article>
+    <header><strong>Control</strong></header>
+    <div id="controls">
+      {% include "partials/controls.html" %}
+    </div>
+  </article>
+
+  <article>
+    <header><strong>Eventos</strong></header>
+    <ul class="logs">
+      <template x-for="line in logs" :key="line.key">
+        <li><code x-text="line.level"></code> <span x-text="line.msg"></span></li>
+      </template>
+      {% for line in logs %}
+      <li><code>{{ line.level }}</code> {{ line.msg }}</li>
+      {% else %}
+      <li x-show="logs.length === 0" class="muted">Sin eventos.</li>
+      {% endfor %}
+    </ul>
+  </article>
+</div>
+
+<script>
+  function dashboard(initial) {
+    return {
+      status: initial,
+      logs: [],
+      ws: false,
+      connect() {
+        const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+        const socket = new WebSocket(`${proto}://${location.host}/ws/telemetry`);
+        socket.onopen = () => { this.ws = true; };
+        socket.onclose = () => {
+          this.ws = false;
+          // La Pi puede reiniciar el web; reintentar sin recargar la pagina.
+          setTimeout(() => this.connect(), 2000);
+        };
+        socket.onmessage = (event) => {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'status') {
+            this.status = msg;
+          } else if (msg.ev === 'error') {
+            this.logs.unshift({ key: Date.now() + Math.random(), level: msg.level || 'error', msg: msg.msg || '' });
+            this.logs = this.logs.slice(0, 10);
+          }
+        };
+      },
+    };
+  }
+</script>
+{% endblock %}

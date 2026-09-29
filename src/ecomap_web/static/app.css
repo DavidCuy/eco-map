@@ -1,0 +1,46 @@
+/* Estilos propios de Eco-Map. Todo lo demas viene de Pico.
+   Se opera a oscuras, al lado del proyector: contraste alto y nada de blancos. */
+
+:root {
+  --ecomap-up: #2ecc71;
+  --ecomap-down: #e74c3c;
+}
+
+.dot {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  margin-right: 0.4rem;
+  vertical-align: middle;
+}
+
+.dot-up { background: var(--ecomap-up); }
+.dot-down { background: var(--ecomap-down); }
+
+.metrics h3 {
+  margin: 0.1rem 0 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.metrics small {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
+
+.muted { opacity: 0.6; }
+
+.logs {
+  list-style: none;
+  padding-left: 0;
+  margin-bottom: 0;
+  font-size: 0.9rem;
+}
+
+.logs li { padding: 0.15rem 0; }
+
+/* En celular los botones de control quedan apilados y grandes: se usan a oscuras. */
+@media (max-width: 640px) {
+  .grid > button { min-height: 3rem; }
+}
