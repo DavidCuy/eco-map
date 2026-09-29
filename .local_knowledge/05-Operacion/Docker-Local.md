@@ -2,9 +2,21 @@
 tags: [operacion, docker, dev]
 ---
 
-# Docker y Compose
+# Contenedores y Compose
 
 Único modo de ejecución, en desarrollo y en la Pi. Ver [[ADR-009-Todo-en-Contenedores]].
+
+**Runtime en desarrollo local: Podman rootless con `podman-compose`.** Los archivos son OCI y
+compose estándar, así que sirven igual con Docker; lo que cambia son los comandos. Detalle y
+trampas verificadas en [[ADR-012-Podman-Desarrollo-Local]].
+
+```bash
+uv tool install podman-compose                 # una vez
+podman build -t ecomap:latest .
+podman-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+podman logs -f eco-map_render_1                # ojo: guion bajo con podman-compose
+podman-compose -f docker-compose.yml -f docker-compose.dev.yml down
+```
 
 ## Volúmenes
 
@@ -43,12 +55,14 @@ WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/src  /app/src
 COPY migrations/ ./migrations/
+COPY effects/ ./effects-seed/
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1
-EXPOSE 8000
+EXPOSE 8000 8001
 CMD ["ecomap-web"]
 ```
 
 - `pyproject.toml` + `uv.lock` antes que el código: la capa de dependencias se cachea. Ver [[ADR-003-uv]].
+- `libgl1-mesa-dri` trae llvmpipe, que es lo que hace posible el modo headless sin GPU.
 - `opencv-python-headless`, nunca la variante con GUI: evita arrastrar GTK.
 - `network-manager` solo aporta el cliente `nmcli`; el daemon corre en el host. Ver [[Modulo-Red]].
 - `effects/`, `media/` y `data/` **no** se copian a la imagen: son volúmenes.
@@ -109,10 +123,16 @@ services:
       - ./src:/app/src
       - ./effects:/effects          # bind mount: editar shaders con el editor local
   render:
-    command: ecomap-render --headless --preview-port 8001
+    command: ecomap-render
     environment:
+      ECOMAP_RENDER_MODE: headless
+      ECOMAP_GL_BACKEND: egl
       LIBGL_ALWAYS_SOFTWARE: "1"
-      ECOMAP_CAMERA: "fake:///media/sample.mp4"
+      ECOMAP_WIDTH: "640"        # llvmpipe no llega a mas
+      ECOMAP_HEIGHT: "360"
+      ECOMAP_FPS: "30"
+      ECOMAP_PREVIEW_PORT: "8001"
+      ECOMAP_CAMERA: "fake://"
     ports: ["8001:8001"]
     volumes:
       - ./src:/app/src
@@ -120,7 +140,7 @@ services:
 ```
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+podman-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ```
 
 Sin proyector, sin cámara, sin Pi: el render dibuja a un FBO y expone el resultado como MJPEG en `:8001`, que la UI muestra como preview. Es lo que permite desarrollar todo el flujo de calibración y efectos en el escritorio. Ver [[Modulo-Render]].
@@ -147,8 +167,8 @@ Detalle de despliegue en [[Despliegue-Raspberry]].
 ## Limitaciones conocidas
 
 - Con `LIBGL_ALWAYS_SOFTWARE=1` el render va por CPU (llvmpipe): valida lógica y shaders simples, **no** mide rendimiento. Las mediciones reales se hacen en la Pi. Ver [[Presupuesto-de-Rendimiento]].
-- El socket IPC va por **volumen nombrado**, no por bind mount: los bind mounts de sockets Unix fallan en Docker Desktop sobre Windows y macOS.
-- En Docker Desktop sobre Windows no hay passthrough de USB: la cámara real se prueba en Linux o en la Pi; en Windows se usa `FakeSource`.
+- El socket IPC va por **volumen nombrado**, no por bind mount: los bind mounts de sockets Unix fallan sobre Windows y macOS, tanto con Docker Desktop como con la máquina de Podman.
+- Sobre Windows no hay passthrough de USB (ni con Docker Desktop ni con Podman en WSL): la cámara real se prueba en Linux o en la Pi; en Windows se usa `FakeSource`.
 - La versión de Mesa en la imagen debe ser compatible con el kernel del host. Riesgo asumido y anotado en [[ADR-009-Todo-en-Contenedores]].
 
-Relacionado: [[Despliegue-Raspberry]] · [[Estructura-Repositorio]] · [[Modulo-Efectos]]
+Relacionado: [[ADR-012-Podman-Desarrollo-Local]] · [[Despliegue-Raspberry]] · [[Estructura-Repositorio]] · [[Modulo-Efectos]]

@@ -14,7 +14,7 @@ Abrir esta carpeta como *vault* en Obsidian y arrancar por **[[Eco-Map]]** (nodo
 | `00-MOC/` | [[Eco-Map]] — mapa de contenidos, puerta de entrada |
 | `01-Vision/` | [[Vision-Producto]] · [[Casos-de-Uso]] · [[Glosario]] |
 | `02-Arquitectura/` | [[Arquitectura-General]] · [[Modulo-Web-API]] · [[Modulo-Calibracion]] · [[Warping-y-Homografia]] · [[Modulo-Render]] · [[Modulo-Efectos]] · [[Modulo-Camara-Feedback]] · [[Modulo-Red]] · [[Modelo-de-Datos]] · [[Contratos-API]] · [[Presupuesto-de-Rendimiento]] · [[Estructura-Repositorio]] · [[Seguridad-y-Red]] |
-| `03-Decisiones/` | ADRs 001–011 (007 y 008 reemplazadas) |
+| `03-Decisiones/` | ADRs 001–012 (007 y 008 reemplazadas) |
 | `04-Hardware/` | [[Raspberry-Pi-Setup]] · [[Proyector]] · [[Camara]] |
 | `05-Operacion/` | [[Docker-Local]] · [[Despliegue-Raspberry]] · [[Roadmap]] |
 | `06-Referencias/` | [[Referencias-Externas]] |

@@ -11,8 +11,8 @@ services:
       ECOMAP_GL_BACKEND: egl
       LIBGL_ALWAYS_SOFTWARE: "1"
       # Resolucion baja: llvmpipe no da 1080p60 y aca solo se valida logica.
-      ECOMAP_WIDTH: "960"
-      ECOMAP_HEIGHT: "540"
+      ECOMAP_WIDTH: "640"
+      ECOMAP_HEIGHT: "360"
       ECOMAP_FPS: "30"
       ECOMAP_PREVIEW_PORT: "8001"
       ECOMAP_CAMERA: "fake://"
