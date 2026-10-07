@@ -25,7 +25,22 @@ Un efecto **es un directorio**, no una clase de Python. Agregar un efecto = copi
 - Los assets pesados (videos, imágenes) **no** van aquí: van al volumen `ecomap-media`, y el manifiesto los referencia por ruta relativa.
 - En desarrollo se monta como bind mount de `./effects`: se edita un `.glsl` con el editor local y se recarga sin reconstruir la imagen.
 
-En la DB solo queda el espejo del manifiesto (`effect.id`, nombre, versión, `available`). Si el archivo desaparece, la fila queda con `available = 0` y las capas que lo usaban no se rompen.
+## Dos estados, dos fuentes
+
+Un efecto tiene **dos** formas de no servir, y vienen de lados distintos:
+
+| Estado | Lo sabe | Significa |
+|---|---|---|
+| `available` | el **web**, al escanear el disco | el manifiesto es válido y el directorio existe |
+| `compiled` | el **render**, al compilar | el shader pasa el compilador de **este** driver |
+
+Un efecto puede estar perfecto en disco y no compilar en la Pi: por eso el render publica por el bus
+qué compiló y qué no, y la UI cruza las dos fuentes. Si el render todavía no reportó nada, se confía
+en el espejo — mentir hacia "disponible" es peor que esperar.
+
+En la DB solo queda el espejo del manifiesto (`effect.id`, nombre, versión, `available`). Si el
+archivo desaparece, la fila queda con `available = 0` y **no se borra**: las capas que lo
+referencian se degradan en vez de romperse.
 
 ## El contrato del shader
 
@@ -69,6 +84,9 @@ Reglas que hacen fallar la carga, a propósito y temprano:
   ]
 }
 ```
+
+`step` es opcional: si no está, la UI usa un centésimo del rango. Importa cuando el parámetro es
+conceptualmente entero — "40.08 celdas" no significa nada.
 
 El manifiesto **genera la UI sola**: FastAPI lo valida con Pydantic y Jinja2 pinta el control por `type` (`float`→range, `color`→color picker, `bool`→switch, `enum`→select). Un efecto nuevo aparece en la web sin tocar frontend.
 

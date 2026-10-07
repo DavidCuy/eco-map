@@ -104,7 +104,7 @@ async def test_el_dashboard_es_el_workspace_de_calibracion(cliente):
 
     html = (await client.get("/")).text
 
-    assert 'workspace(JSON.parse(' in html
+    assert "workspace(JSON.parse(" in html
     assert "<canvas" in html
     assert "/static/calibrate.js" in html
     # La configuracion viaja como JSON embebido: la malla puede tener cientos

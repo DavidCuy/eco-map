@@ -52,6 +52,7 @@ class EffectParamOut(BaseModel):
     min: float
     max: float
     default: Any
+    step: float | None = None
     options: list[str] = []
 
 
@@ -66,11 +67,21 @@ class EffectOut(BaseModel):
     cost: str = "low"
     params: list[EffectParamOut] = []
     available: bool = True
+    # `available` dice que el manifiesto es valido y el directorio existe;
+    # `compiled`, que el shader pasa el compilador de **este** driver. Un efecto
+    # puede estar perfecto en disco y no compilar en la Pi.
+    compiled: bool = True
     error: str | None = None
 
 
 class EffectSelect(BaseModel):
     id: str = Field(min_length=1, max_length=64)
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class ParamsIn(BaseModel):
+    """Mezcla parcial de parametros: lo que no viene, no se toca."""
+
     params: dict[str, Any] = Field(default_factory=dict)
 
 

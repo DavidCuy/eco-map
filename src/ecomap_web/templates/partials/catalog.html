@@ -1,0 +1,33 @@
+{# Catalogo de efectos: preview, tags y costo. El preview sale del volumen,
+   no de static, porque el catalogo se puede reemplazar entero sin tocar la
+   imagen del contenedor. #}
+<div class="catalog">
+  {% for effect in effects %}
+  <article class="card {{ 'card-off' if not (effect.available and effect.compiled) else '' }}">
+    <img src="/api/effects/{{ effect.id }}/preview" alt="preview de {{ effect.name }}"
+         loading="lazy" onerror="this.style.visibility='hidden'">
+    <header>
+      <strong>{{ effect.name }}</strong>
+      <small class="muted">v{{ effect.version }}</small>
+    </header>
+    <p class="tags">
+      {% for tag in effect.tags %}<code>{{ tag }}</code>{% endfor %}
+      <code>costo {{ effect.cost }}</code>
+      {% if effect.needs_camera %}<code>cámara</code>{% endif %}
+    </p>
+    {% if not effect.available %}
+    <small class="muted">⚠ ya no está en disco; las capas que lo usan no se rompen</small>
+    {% elif not effect.compiled %}
+    <small class="muted">⚠ no compila: {{ effect.error }}</small>
+    {% else %}
+    <button hx-post="/api/effects/active" hx-ext="json-enc"
+            hx-vals='{"id": "{{ effect.id }}"}'
+            hx-target="#controls" hx-swap="innerHTML">Usar</button>
+    {% endif %}
+  </article>
+  {% endfor %}
+</div>
+<button class="secondary outline"
+        hx-post="/api/effects/reload" hx-target="#catalog" hx-swap="innerHTML">
+  Volver a escanear el volumen
+</button>

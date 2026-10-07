@@ -42,6 +42,10 @@ class EffectParam(BaseModel):
     min: float = 0.0
     max: float = 1.0
     default: Any = 0.0
+    # Paso del control. Si no se declara, la UI usa un centesimo del rango.
+    # Importa cuando el parametro es conceptualmente entero: "40.08 celdas" no
+    # significa nada.
+    step: float | None = Field(default=None, gt=0)
     options: list[str] = Field(default_factory=list)
 
     @field_validator("options")

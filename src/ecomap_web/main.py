@@ -6,6 +6,7 @@ clientes WebSocket) vive en el proceso. Ver ADR-001.
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -22,6 +23,7 @@ from ecomap_web import migrate
 from ecomap_web.bus import BusClient
 from ecomap_web.db import connect, get_setting
 from ecomap_web.routers import camera, effects, pages, surfaces, system, ws
+from ecomap_web.services import effects as effect_service
 from ecomap_web.services import surfaces as surface_service
 from ecomap_web.state import AppState
 
@@ -52,6 +54,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         state.blackout = get_setting(conn, "blackout", "0") == "1"
         state.effect = get_setting(conn, "active_effect", "grid_test")
         state.camera_source = get_setting(conn, "camera", settings.camera)
+        state.effect_params = json.loads(get_setting(conn, "active_effect_params", "{}") or "{}")
+
+        # El catalogo se espeja al arrancar: si alguien copio un efecto nuevo
+        # al volumen con el sistema apagado, aparece sin tener que recargar.
+        resumen = effect_service.sincronizar(conn, settings.effects_dir)
+        log.info(
+            "catalogo: %d efectos, %d con error", len(resumen["cargados"]), len(resumen["errores"])
+        )
 
         bus = BusClient(settings.bus_address())
         bus.subscribe(state.handle_event)

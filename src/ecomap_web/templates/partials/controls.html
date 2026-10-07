@@ -1,4 +1,8 @@
-{# Controles del render. Fragmento intercambiado por HTMX tras cada acción. #}
+{% import "macros/params.html" as params %}
+{# Efecto activo, sus parámetros y el blackout. Fragmento intercambiado por
+   HTMX tras cada acción: los controles se regeneran desde el manifiesto, así
+   que un efecto con un parámetro nuevo aparece sin tocar el frontend. #}
+
 <div class="grid">
   <button
     class="{{ 'contrast' if status.blackout else 'secondary' }}"
@@ -9,26 +13,39 @@
     hx-swap="innerHTML">
     {{ 'Salir de blackout' if status.blackout else 'Blackout' }}
   </button>
+
+  <select name="id"
+          hx-post="/api/effects/active"
+          hx-ext="json-enc"
+          hx-trigger="change"
+          hx-vals='js:{"id": event.target.value}'
+          hx-target="#controls"
+          hx-swap="innerHTML"
+          aria-label="Efecto activo">
+    {% for effect in effects %}
+    <option value="{{ effect.id }}"
+            {{ 'selected' if effect.id == status.effect else '' }}
+            {{ 'disabled' if not (effect.available and effect.compiled) else '' }}>
+      {{ effect.name }}{% if not effect.available %} — falta en disco{% elif not effect.compiled %} — no compila{% endif %}
+    </option>
+    {% endfor %}
+  </select>
 </div>
 
-<form hx-post="/api/effects/active"
-      hx-ext="json-enc"
-      hx-target="#controls"
-      hx-swap="innerHTML">
-  <label for="effect-id">
-    Efecto
-    <select id="effect-id" name="id">
-      {% for effect in effects %}
-      <option value="{{ effect.id }}"
-              {{ 'selected' if effect.id == status.effect else '' }}
-              {{ 'disabled' if not effect.available else '' }}>
-        {{ effect.name }}{{ ' — no compila' if not effect.available else '' }}
-      </option>
-      {% endfor %}
-    </select>
-  </label>
-  <button type="submit">Aplicar</button>
-</form>
+{% if active_effect and active_effect.params %}
+<div class="params">
+  {% for param in active_effect.params %}
+  {{ params.control(param, values.get(param.key)) }}
+  {% endfor %}
+</div>
+<button class="secondary outline"
+        hx-post="/api/effects/active/reset"
+        hx-target="#controls" hx-swap="innerHTML">
+  Restaurar valores por defecto
+</button>
+{% elif active_effect %}
+<small class="muted">Este efecto no tiene parámetros.</small>
+{% endif %}
 
 {% if status.effect_error %}
 <p><small class="muted">⚠ {{ status.effect_error }}</small></p>

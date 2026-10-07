@@ -13,7 +13,7 @@ import logging
 import time
 from typing import Any
 
-from ecomap_core.protocol import EV_CAMERA, EV_ERROR, EV_TELE
+from ecomap_core.protocol import EV_CAMERA, EV_EFFECTS, EV_ERROR, EV_TELE
 from ecomap_core.schemas import CameraStatus, Telemetry
 
 log = logging.getLogger(__name__)
@@ -29,6 +29,10 @@ class AppState:
         self.effect: str | None = None
         self.effect_params: dict[str, Any] = {}
         self.effect_error: str | None = None
+        # Lo que el render reporto que NO compila, por id. Es lo unico que el
+        # web no puede saber solo: el manifiesto puede estar perfecto y el
+        # shader fallar en el driver de turno.
+        self.effect_errors: dict[str, str] = {}
         self.camera = CameraStatus()
         self.camera_source: str | None = None
         self.logs: list[dict[str, Any]] = []
@@ -55,6 +59,9 @@ class AppState:
                 return
             if self.camera.source:
                 self.camera_source = self.camera.source
+        elif kind == EV_EFFECTS:
+            errores = message.get("errors") or {}
+            self.effect_errors = {str(k): str(v) for k, v in errores.items()}
         elif kind == EV_ERROR:
             if message.get("source") == "effect":
                 # El render no pudo usar el efecto pedido: queda visible en la

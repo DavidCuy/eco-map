@@ -1,0 +1,62 @@
+{# Controles de parámetros, generados desde el manifiesto del efecto.
+
+   Esto es lo que hace que agregar un efecto no toque el frontend: el manifiesto
+   declara tipo, rango y etiqueta, y acá hay un control por tipo. Un parámetro
+   nuevo aparece solo.
+
+   Cada control manda una mezcla parcial a PUT /api/effects/active/params, así
+   que mover un slider no pisa el resto de los valores. #}
+
+{% macro control(param, value) %}
+{% set valor = value if value is not none else param.default %}
+<label class="param">
+  <span>
+    {{ param.label }}
+    {% if param.type == 'float' %}<small class="muted" x-text="$refs.{{ param.key }}?.value">{{ valor }}</small>{% endif %}
+  </span>
+
+  {% if param.type == 'float' %}
+  <input type="range" name="{{ param.key }}" x-ref="{{ param.key }}"
+         min="{{ param.min }}" max="{{ param.max }}"
+         step="{{ param.step if param.step else ((param.max - param.min) / 100) | round(4) }}"
+         value="{{ valor }}"
+         hx-put="/api/effects/active/params"
+         hx-ext="json-enc"
+         hx-trigger="change"
+         hx-vals='js:{"params": {"{{ param.key }}": parseFloat(event.target.value)}}'
+         hx-target="#controls" hx-swap="innerHTML">
+
+  {% elif param.type == 'color' %}
+  <input type="color" name="{{ param.key }}" value="{{ valor }}"
+         hx-put="/api/effects/active/params"
+         hx-ext="json-enc"
+         hx-trigger="change"
+         hx-vals='js:{"params": {"{{ param.key }}": event.target.value}}'
+         hx-target="#controls" hx-swap="innerHTML">
+
+  {% elif param.type == 'bool' %}
+  <input type="checkbox" role="switch" name="{{ param.key }}"
+         {{ 'checked' if valor else '' }}
+         hx-put="/api/effects/active/params"
+         hx-ext="json-enc"
+         hx-trigger="change"
+         hx-vals='js:{"params": {"{{ param.key }}": event.target.checked}}'
+         hx-target="#controls" hx-swap="innerHTML">
+
+  {% elif param.type == 'enum' %}
+  <select name="{{ param.key }}"
+          hx-put="/api/effects/active/params"
+          hx-ext="json-enc"
+          hx-trigger="change"
+          hx-vals='js:{"params": {"{{ param.key }}": parseInt(event.target.value)}}'
+          hx-target="#controls" hx-swap="innerHTML">
+    {% for opcion in param.options %}
+    <option value="{{ loop.index0 }}" {{ 'selected' if loop.index0 == valor else '' }}>{{ opcion }}</option>
+    {% endfor %}
+  </select>
+
+  {% else %}
+  <small class="muted">tipo de parámetro desconocido: {{ param.type }}</small>
+  {% endif %}
+</label>
+{% endmacro %}

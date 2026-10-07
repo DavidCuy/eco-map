@@ -41,12 +41,21 @@ finos.
 GET    /api/effects                  [{id, name, version, tags, needs_camera, cost,
                                        params, available, error}]
 POST   /api/effects/active           {id, params?}   -> {id, params}
-POST   /api/effects/reload           # re-escanea el directorio (Hito 2)
+PUT    /api/effects/active/params    {params: {...}}  # mezcla parcial
+POST   /api/effects/active/reset     # descarta los overrides
+POST   /api/effects/reload           # re-escanea el disco y recompila
+GET    /api/effects/{id}/preview     # JPEG desde el volumen de efectos
 ```
 
-Los efectos que no cargan aparecen igual en el listado, con `available: false` y
-el motivo en `error`: esconderlos haría que un efecto que desapareció parezca que
-nunca existió.
+Los efectos que no cargan aparecen igual en el listado: esconderlos haría que un efecto que
+desapareció parezca que nunca existió. Hay **dos** banderas, porque hay dos formas de fallar:
+
+- `available: false` — el manifiesto es inválido o el directorio ya no está. Lo detecta el web.
+- `compiled: false` + `error` — el shader no compila con el driver actual. Lo detecta el render.
+
+`PUT /active/params` es **mezcla parcial**: lo que no viene, no se toca. Solo se guardan los
+overrides sobre el default del manifiesto, así que `reset` los **descarta** en vez de copiar los
+defaults: si el efecto cambia de versión, se hereda solo.
 
 `POST /active` responde con lo que el web **aceptó**. Si el shader no compila, el
 render lo desmiente después por el bus y el motivo queda en
@@ -120,6 +129,7 @@ Servidor → cliente, 2 Hz:
 {"op":"pattern", "name": "grid"}
 {"op":"camera",  "source": "v4l2:///dev/v4l/by-id/usb-XXXX-video-index0"}
 {"op":"effect",  "id": "grid_test", "params": {"cells": 24}}
+{"op":"effects_reload"}
 {"op":"scene",   "scene": {"calibration_version": 7, "surfaces": [
                    {"id": 1, "cols": 1, "rows": 1, "points": [[0.3,0.2], ...], "opacity": 1.0}]}}
 {"op":"ping"}
@@ -130,6 +140,7 @@ Render → web:
 {"ev":"error","source":"shader","effect":"plasma","msg":"..."}
 {"ev":"calib","progress":0.45,"stage":"graycode_v"}
 {"ev":"camera","state":"open","source":"fake://","width":640,"height":480,"fps":15.0,"backend":"fake"}
+{"ev":"effects","compiled":["grid_test","solid"],"errors":{"plasma":"line 12: syntax error"}}
 ```
 
 ### Estados de cámara

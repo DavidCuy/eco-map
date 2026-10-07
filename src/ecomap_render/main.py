@@ -14,12 +14,14 @@ from typing import Any
 
 from ecomap_core.protocol import (
     EV_CAMERA,
+    EV_EFFECTS,
     EV_ERROR,
     EV_PONG,
     EV_TELE,
     OP_BLACKOUT,
     OP_CAMERA,
     OP_EFFECT,
+    OP_EFFECTS_RELOAD,
     OP_PING,
     OP_SCENE,
     ev,
@@ -74,6 +76,7 @@ class RenderApp:
             log.error("shader del esqueleto no compila: %s", exc)
             self.bus.publish(ev(EV_ERROR, source="shader", level="error", msg=str(exc)))
             self.blackout = True
+        self._publish_effects()
         if isinstance(self.presenter, HeadlessPresenter):
             self.preview = PreviewServer(self.settings.preview_port, self.frames)
             self.preview.start()
@@ -100,6 +103,10 @@ class RenderApp:
         elif operation == OP_BLACKOUT:
             self.blackout = bool(message.get("on"))
             log.info("blackout: %s", self.blackout)
+        elif operation == OP_EFFECTS_RELOAD:
+            if self.pipeline is not None:
+                self.pipeline.library.reload()
+                self._publish_effects()
         elif operation == OP_EFFECT:
             self._select_effect(str(message.get("id", "")), dict(message.get("params") or {}))
         elif operation == OP_CAMERA:
@@ -154,6 +161,23 @@ class RenderApp:
                 # No se llego al presupuesto: se resincroniza para no acumular
                 # deuda y entrar en espiral.
                 next_frame = time.perf_counter()
+
+    def _publish_effects(self) -> None:
+        """Avisa que efectos compilaron y cuales no.
+
+        El web lee los manifiestos, pero quien compila es el render: si un
+        shader no pasa el compilador del driver, solo el render se entera. Sin
+        esto, la UI ofreceria un efecto que no se puede usar.
+        """
+        if self.pipeline is None:
+            return
+        self.bus.publish(
+            ev(
+                EV_EFFECTS,
+                compiled=sorted(self.pipeline.library.compiled),
+                errors=dict(self.pipeline.library.errors),
+            )
+        )
 
     def _select_effect(self, effect_id: str, params: dict[str, Any]) -> None:
         """Cambia el efecto activo y reporta si no se pudo.
