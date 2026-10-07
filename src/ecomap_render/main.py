@@ -14,12 +14,14 @@ from typing import Any
 
 from ecomap_core.protocol import (
     EV_CAMERA,
+    EV_EFFECTS,
     EV_ERROR,
     EV_PONG,
     EV_TELE,
     OP_BLACKOUT,
     OP_CAMERA,
     OP_EFFECT,
+    OP_EFFECTS_RELOAD,
     OP_PING,
     OP_SCENE,
     ev,
@@ -43,6 +45,10 @@ class RenderApp:
         self.running = True
         self.blackout = False
         self.effect_id: str | None = None
+        # Instante en que llego una op que cambia lo que se ve, para medir
+        # cuanto tarda en aparecer en pantalla (RNF-2).
+        self._op_recibida: float | None = None
+        self.apply_ms = 0.0
         self.scene_id: int | None = None
 
         self.bus = BusServer(settings.bus_address())
@@ -74,6 +80,7 @@ class RenderApp:
             log.error("shader del esqueleto no compila: %s", exc)
             self.bus.publish(ev(EV_ERROR, source="shader", level="error", msg=str(exc)))
             self.blackout = True
+        self._publish_effects()
         if isinstance(self.presenter, HeadlessPresenter):
             self.preview = PreviewServer(self.settings.preview_port, self.frames)
             self.preview.start()
@@ -100,6 +107,10 @@ class RenderApp:
         elif operation == OP_BLACKOUT:
             self.blackout = bool(message.get("on"))
             log.info("blackout: %s", self.blackout)
+        elif operation == OP_EFFECTS_RELOAD:
+            if self.pipeline is not None:
+                self.pipeline.library.reload()
+                self._publish_effects()
         elif operation == OP_EFFECT:
             self._select_effect(str(message.get("id", "")), dict(message.get("params") or {}))
         elif operation == OP_CAMERA:
@@ -123,7 +134,10 @@ class RenderApp:
         next_frame = started
 
         while self.running and not self.presenter.should_close():
-            for message in self.bus.poll():
+            mensajes = self.bus.poll()
+            if mensajes:
+                self._op_recibida = time.perf_counter()
+            for message in mensajes:
                 self.apply(message)
 
             now = time.perf_counter()
@@ -134,6 +148,12 @@ class RenderApp:
             else:
                 self.presenter.ctx.clear(0.0, 0.0, 0.0)
             self.presenter.end_frame()
+
+            if self._op_recibida is not None:
+                # De op recibida a frame presentado. Es el tramo que el render
+                # controla; el resto de la latencia es navegador, HTTP y bus.
+                self.apply_ms = (time.perf_counter() - self._op_recibida) * 1000.0
+                self._op_recibida = None
 
             self._maybe_preview(now)
             self._maybe_telemetry(now, tele_period)
@@ -155,6 +175,23 @@ class RenderApp:
                 # deuda y entrar en espiral.
                 next_frame = time.perf_counter()
 
+    def _publish_effects(self) -> None:
+        """Avisa que efectos compilaron y cuales no.
+
+        El web lee los manifiestos, pero quien compila es el render: si un
+        shader no pasa el compilador del driver, solo el render se entera. Sin
+        esto, la UI ofreceria un efecto que no se puede usar.
+        """
+        if self.pipeline is None:
+            return
+        self.bus.publish(
+            ev(
+                EV_EFFECTS,
+                compiled=sorted(self.pipeline.library.compiled),
+                errors=dict(self.pipeline.library.errors),
+            )
+        )
+
     def _select_effect(self, effect_id: str, params: dict[str, Any]) -> None:
         """Cambia el efecto activo y reporta si no se pudo.
 
@@ -163,7 +200,7 @@ class RenderApp:
         """
         if self.pipeline is None:
             return
-        error = self.pipeline.set_effect(effect_id, params)
+        error = self.pipeline.set_fallback_effect(effect_id, params)
         if error:
             self.bus.publish(
                 ev(EV_ERROR, source="effect", level="error", msg=f"{effect_id}: {error}")
@@ -182,9 +219,8 @@ class RenderApp:
         """
         if self.pipeline is None:
             return
-        surfaces = scene.get("surfaces") or []
-        self.pipeline.set_surfaces(surfaces)
-        self.scene_id = scene.get("calibration_version")
+        self.pipeline.set_scene(scene)
+        self.scene_id = scene.get("scene_id")
 
     # --- camara ---
 
@@ -267,6 +303,7 @@ class RenderApp:
                 temp=self._temp,
                 dropped=self.bus.dropped_events,
                 scene_id=self.scene_id,
+                apply_ms=round(self.apply_ms, 2),
                 mode=self.settings.render_mode,
             )
         )

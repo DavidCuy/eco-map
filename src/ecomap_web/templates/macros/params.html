@@ -1,0 +1,43 @@
+{# Controles de parámetros, generados desde el manifiesto del efecto.
+
+   Esto es lo que hace que agregar un efecto no toque el frontend: el manifiesto
+   declara tipo, rango y etiqueta, y acá hay un control por tipo. Un parámetro
+   nuevo aparece solo.
+
+   Los controles **no** usan HTMX: los maneja `params.js`. Cada respuesta de
+   HTMX reemplaza el fragmento entero, y hacer eso mientras el dedo arrastra el
+   slider lo arranca del control. Ver Direccion-de-UI. #}
+
+{% macro control(param, value) %}
+{% set valor = value if value is not none else param.default %}
+<label class="param">
+  <span>
+    {{ param.label }}
+    {% if param.type == 'float' %}<small class="muted" data-param-valor>{{ valor }}</small>{% endif %}
+  </span>
+
+  {% if param.type == 'float' %}
+  <input type="range" data-param="{{ param.key }}" data-param-type="float"
+         min="{{ param.min }}" max="{{ param.max }}"
+         step="{{ param.step if param.step else ((param.max - param.min) / 100) | round(4) }}"
+         value="{{ valor }}">
+
+  {% elif param.type == 'color' %}
+  <input type="color" data-param="{{ param.key }}" data-param-type="color" value="{{ valor }}">
+
+  {% elif param.type == 'bool' %}
+  <input type="checkbox" role="switch" data-param="{{ param.key }}" data-param-type="bool"
+         {{ 'checked' if valor else '' }}>
+
+  {% elif param.type == 'enum' %}
+  <select data-param="{{ param.key }}" data-param-type="enum">
+    {% for opcion in param.options %}
+    <option value="{{ loop.index0 }}" {{ 'selected' if loop.index0 == valor else '' }}>{{ opcion }}</option>
+    {% endfor %}
+  </select>
+
+  {% else %}
+  <small class="muted">tipo de parámetro desconocido: {{ param.type }}</small>
+  {% endif %}
+</label>
+{% endmacro %}

@@ -21,8 +21,20 @@ OP_POINTS = "points"
 OP_BLACKOUT = "blackout"
 OP_EFFECT = "effect"
 OP_CAMERA = "camera"
+OP_EFFECTS_RELOAD = "effects_reload"
 
-OPS = frozenset({OP_PING, OP_SCENE, OP_PARAM, OP_POINTS, OP_BLACKOUT, OP_EFFECT, OP_CAMERA})
+OPS = frozenset(
+    {
+        OP_PING,
+        OP_SCENE,
+        OP_PARAM,
+        OP_POINTS,
+        OP_BLACKOUT,
+        OP_EFFECT,
+        OP_EFFECTS_RELOAD,
+        OP_CAMERA,
+    }
+)
 
 # --- eventos (render -> web) ---
 EV_PONG = "pong"
@@ -30,8 +42,9 @@ EV_TELE = "tele"
 EV_ERROR = "error"
 EV_CALIB = "calib"
 EV_CAMERA = "camera"
+EV_EFFECTS = "effects"
 
-EVENTS = frozenset({EV_PONG, EV_TELE, EV_ERROR, EV_CALIB, EV_CAMERA})
+EVENTS = frozenset({EV_PONG, EV_TELE, EV_ERROR, EV_CALIB, EV_CAMERA, EV_EFFECTS})
 
 MAX_LINE_BYTES = 1 << 20  # 1 MiB: una escena serializada entra de sobra
 

@@ -18,6 +18,9 @@ class Telemetry(BaseModel):
     fps: float = 0.0
     frame_ms: float = 0.0
     frame_ms_max: float = 0.0
+    # De operacion recibida a frame presentado: el tramo de la latencia que el
+    # render controla (RNF-2).
+    apply_ms: float = 0.0
     temp: float | None = None
     dropped: int = 0
     scene_id: int | None = None
@@ -32,6 +35,7 @@ class SystemStatus(BaseModel):
     fps: float
     frame_ms: float
     frame_ms_max: float
+    apply_ms: float
     temp: float | None
     dropped: int
     scene_id: int | None
@@ -52,6 +56,7 @@ class EffectParamOut(BaseModel):
     min: float
     max: float
     default: Any
+    step: float | None = None
     options: list[str] = []
 
 
@@ -66,11 +71,21 @@ class EffectOut(BaseModel):
     cost: str = "low"
     params: list[EffectParamOut] = []
     available: bool = True
+    # `available` dice que el manifiesto es valido y el directorio existe;
+    # `compiled`, que el shader pasa el compilador de **este** driver. Un efecto
+    # puede estar perfecto en disco y no compilar en la Pi.
+    compiled: bool = True
     error: str | None = None
 
 
 class EffectSelect(BaseModel):
     id: str = Field(min_length=1, max_length=64)
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class ParamsIn(BaseModel):
+    """Mezcla parcial de parametros: lo que no viene, no se toca."""
+
     params: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -156,3 +171,59 @@ class SurfaceOut(BaseModel):
     opacity: float
     enabled: bool
     updated_at: str
+
+
+# --- escenas y capas -----------------------------------------------------
+
+BlendMode = Literal["normal", "add", "multiply", "screen"]
+
+
+class SceneCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+class SceneUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+
+
+class LayerCreate(BaseModel):
+    surface_id: int
+    effect_id: str = Field(min_length=1, max_length=64)
+    blend_mode: BlendMode = "normal"
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class LayerUpdate(BaseModel):
+    """PATCH: lo que no viene, no se toca."""
+
+    blend_mode: BlendMode | None = None
+    enabled: bool | None = None
+    params: dict[str, Any] | None = None
+
+
+class LayerOut(BaseModel):
+    id: int
+    scene_id: int
+    surface_id: int
+    surface_name: str
+    effect_id: str
+    effect_name: str
+    effect_available: bool
+    z_order: int
+    blend_mode: BlendMode
+    params: dict[str, Any]
+    enabled: bool
+
+
+class SceneOut(BaseModel):
+    id: int
+    name: str
+    is_default: bool
+    is_active: bool
+    layers: list[LayerOut] = []
+
+
+class ReorderIn(BaseModel):
+    """Ids de capa en el orden deseado, de abajo hacia arriba."""
+
+    layer_ids: list[int] = Field(min_length=1)

@@ -18,7 +18,6 @@ from ecomap_core.geometry import (
     validate_mesh,
     validate_subdivision,
 )
-from ecomap_core.protocol import OP_SCENE, op
 from ecomap_web.bus import BusClient
 from ecomap_web.db import get_setting, set_setting
 from ecomap_web.repo import surfaces as repo
@@ -133,9 +132,15 @@ def serializar_escena(conn: sqlite3.Connection) -> dict[str, Any]:
 
 
 async def push_escena(bus: BusClient, conn: sqlite3.Connection) -> bool:
-    """Empuja la escena al render. False si no esta conectado; al reconectar se
-    reenvia completa, asi que no hay nada que encolar."""
-    return await bus.send(op(OP_SCENE, scene=serializar_escena(conn)))
+    """Empuja la escena al render tras un cambio de calibracion.
+
+    Delega en el servicio de escenas: desde US-13 lo que el render dibuja son
+    capas, y una superficie sola no significa nada para el. False si el render
+    no esta conectado; al reconectar se reenvia completa.
+    """
+    from ecomap_web.services import scenes as scene_service
+
+    return await scene_service.push(bus, conn)
 
 
 def _bump_calibration(conn: sqlite3.Connection) -> None:

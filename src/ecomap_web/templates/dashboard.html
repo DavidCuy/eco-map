@@ -27,6 +27,15 @@
 
   <p x-show="error" class="error" x-text="error"></p>
 
+  {% if fallback_activo %}
+  {# El efecto a pantalla completa sin capas es intencional, pero con caras ya
+     calibradas parece que el warp esta roto. Se dice. #}
+  <p class="aviso">
+    Proyectando <strong>a pantalla completa</strong>: hay caras calibradas pero ninguna capa las usa.
+    Agregá una capa en <em>Escenas y capas</em> para que el efecto se deforme sobre ellas.
+  </p>
+  {% endif %}
+
   {# Canvas: el preview del render de fondo, los handles encima. Se separa en
      dos capas para no tener que leer píxeles del stream, que ensuciaría el
      canvas por CORS. #}
@@ -77,6 +86,20 @@
     <summary>Efecto y control</summary>
     <div id="controls">
       {% include "partials/controls.html" %}
+    </div>
+  </details>
+
+  <details class="panel" open>
+    <summary>Escenas y capas</summary>
+    <div id="scenes">
+      {% include "partials/scenes.html" %}
+    </div>
+  </details>
+
+  <details class="panel">
+    <summary>Catálogo de efectos</summary>
+    <div id="catalog">
+      {% include "partials/catalog.html" %}
     </div>
   </details>
 

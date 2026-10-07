@@ -41,7 +41,11 @@ void main() {
     // La division por w es lo que evita el quiebre diagonal al interpolar UV
     // sobre los dos triangulos de una celda deformada.
     vec2 uv = v_uvq.xy / v_uvq.z;
-    f_color = vec4(texture(u_texture, uv).rgb, 1.0) * u_opacity;
+    vec4 src = texture(u_texture, uv);
+    // Alfa premultiplicado: el color ya viene multiplicado por su alfa y por la
+    // opacidad de la superficie, asi que los cuatro modos de blend se definen
+    // con la misma convencion y no hay que cambiar de formula por modo.
+    f_color = vec4(src.rgb * u_opacity, src.a * u_opacity);
 }
 """
 

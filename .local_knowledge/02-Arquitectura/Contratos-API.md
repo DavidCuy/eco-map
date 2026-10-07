@@ -41,12 +41,21 @@ finos.
 GET    /api/effects                  [{id, name, version, tags, needs_camera, cost,
                                        params, available, error}]
 POST   /api/effects/active           {id, params?}   -> {id, params}
-POST   /api/effects/reload           # re-escanea el directorio (Hito 2)
+PUT    /api/effects/active/params    {params: {...}}  # mezcla parcial
+POST   /api/effects/active/reset     # descarta los overrides
+POST   /api/effects/reload           # re-escanea el disco y recompila
+GET    /api/effects/{id}/preview     # JPEG desde el volumen de efectos
 ```
 
-Los efectos que no cargan aparecen igual en el listado, con `available: false` y
-el motivo en `error`: esconderlos haría que un efecto que desapareció parezca que
-nunca existió.
+Los efectos que no cargan aparecen igual en el listado: esconderlos haría que un efecto que
+desapareció parezca que nunca existió. Hay **dos** banderas, porque hay dos formas de fallar:
+
+- `available: false` — el manifiesto es inválido o el directorio ya no está. Lo detecta el web.
+- `compiled: false` + `error` — el shader no compila con el driver actual. Lo detecta el render.
+
+`PUT /active/params` es **mezcla parcial**: lo que no viene, no se toca. Solo se guardan los
+overrides sobre el default del manifiesto, así que `reset` los **descarta** en vez de copiar los
+defaults: si el efecto cambia de versión, se hereda solo.
 
 `POST /active` responde con lo que el web **aceptó**. Si el shader no compila, el
 render lo desmiente después por el bus y el motivo queda en
@@ -55,18 +64,36 @@ de verdad es quien ejecuta.
 
 ## Escenas y capas
 
-```
-GET    /api/scenes
-POST   /api/scenes                   {name}
-POST   /api/scenes/{id}/activate     # cambia lo que se proyecta AHORA
-POST   /api/scenes/{id}/default      # escena de arranque
-POST   /api/scenes/{id}/duplicate
+Una **capa** es efecto + superficie, con orden, blend y parámetros. Una **escena** es un conjunto de
+capas activable de un golpe.
 
-POST   /api/scenes/{id}/layers       {surface_id, effect_id, z_order?, blend_mode?}
-PATCH  /api/layers/{id}              {z_order?, blend_mode?, enabled?}
-PUT    /api/layers/{id}/params       {speed: 0.7, color_a: "#00ffc8"}   # merge parcial
-DELETE /api/layers/{id}
 ```
+GET    /api/scenes                   [{id, name, is_default, is_active, layers}]
+POST   /api/scenes                   {name}            -> 201
+PATCH  /api/scenes/{id}              {name}
+POST   /api/scenes/{id}/activate     # cambia lo que se proyecta AHORA
+POST   /api/scenes/{id}/default      # escena de arranque; no cambia lo actual
+POST   /api/scenes/{id}/duplicate    # copia las capas
+DELETE /api/scenes/{id}              -> 204
+
+POST   /api/scenes/{id}/layers       {surface_id, effect_id, blend_mode?, params?}
+PATCH  /api/layers/{id}              {blend_mode?, enabled?, params?}   # merge parcial
+POST   /api/layers/{id}/move?direction=up|down
+PUT    /api/scenes/{id}/layers/order {layer_ids: [...]}   # orden completo
+DELETE /api/layers/{id}              -> 204
+```
+
+`z_order` **no se elige**: sale del orden de creación y se cambia moviendo o reordenando. Un
+reordenamiento parcial se rechaza con 422: dejaría capas con `z` duplicado y el apilado pasaría a
+depender del id, que no es lo que el usuario ve.
+
+Existen las dos formas de reordenar a propósito. `move` es lo que necesita la UI — calcular la lista
+entera en la plantilla para mover un elemento es ilegible —, y `order` es para arrastrar y soltar.
+
+Blend: `normal`, `add`, `multiply`, `screen`. **Ojo con `multiply`**: sobre fondo negro el resultado
+es negro, así que una capa en multiply solo se ve donde se superpone con otra.
+
+Tope de capas en `setting.max_layers`, 4 por defecto. Superarlo devuelve 422 con el motivo.
 
 ## Sistema y calibración
 
@@ -120,8 +147,13 @@ Servidor → cliente, 2 Hz:
 {"op":"pattern", "name": "grid"}
 {"op":"camera",  "source": "v4l2:///dev/v4l/by-id/usb-XXXX-video-index0"}
 {"op":"effect",  "id": "grid_test", "params": {"cells": 24}}
-{"op":"scene",   "scene": {"calibration_version": 7, "surfaces": [
-                   {"id": 1, "cols": 1, "rows": 1, "points": [[0.3,0.2], ...], "opacity": 1.0}]}}
+{"op":"effects_reload"}
+{"op":"scene",   "scene": {
+                   "scene_id": 3, "calibration_version": 7,
+                   "fallback_effect": "grid_test", "fallback_params": {},
+                   "layers": [{"id": 5, "effect": "plasma", "params": {}, "blend": "add",
+                               "surface": {"id": 1, "cols": 1, "rows": 1,
+                                           "points": [[0.3,0.2], ...], "opacity": 1.0}}]}}
 {"op":"ping"}
 ```
 Render → web:
@@ -130,6 +162,7 @@ Render → web:
 {"ev":"error","source":"shader","effect":"plasma","msg":"..."}
 {"ev":"calib","progress":0.45,"stage":"graycode_v"}
 {"ev":"camera","state":"open","source":"fake://","width":640,"height":480,"fps":15.0,"backend":"fake"}
+{"ev":"effects","compiled":["grid_test","solid"],"errors":{"plasma":"line 12: syntax error"}}
 ```
 
 ### Estados de cámara

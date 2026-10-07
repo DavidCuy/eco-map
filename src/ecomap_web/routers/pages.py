@@ -43,7 +43,9 @@ def dashboard(
     db: DbDep,
 ) -> Response:
     from ecomap_web.routers.camera import devices_out
-    from ecomap_web.routers.effects import catalogo
+    from ecomap_web.routers.effects import catalogo, valores_efectivos
+    from ecomap_web.services import effects as effect_service
+    from ecomap_web.services import scenes as scene_service
     from ecomap_web.services import surfaces as surface_service
 
     status = build_status(bus, state, request.app.state.version)
@@ -67,7 +69,19 @@ def dashboard(
             "devices": devices_out(),
             "selected": state.camera_source or settings.camera,
             "camera": state.camera,
-            "effects": catalogo(settings.effects_dir),
+            "effects": catalogo(db, state),
+            "scenes": scene_service.listar(db),
+            "surfaces": surface_service.listar(db),
+            # Sin capas el efecto va a pantalla completa, que es intencional y
+            # util para apuntar el proyector. El problema es que, con caras ya
+            # calibradas, es indistinguible de que el warp este roto: por eso
+            # la UI lo dice en vez de dejarlo adivinar.
+            "fallback_activo": _fallback_activo(db),
+            "active_effect": effect_service.obtener(db, state.effect) if state.effect else None,
+            "values": valores_efectivos(
+                effect_service.obtener(db, state.effect) if state.effect else None,
+                state.effect_params,
+            ),
             # Se inyecta como JSON y no como atributos sueltos: la malla puede
             # tener cientos de puntos. Va dentro de un <script type="application/json">,
             # y se escapan los "<" para que un nombre de superficie no pueda
@@ -75,6 +89,15 @@ def dashboard(
             "workspace_config": _json_para_script(workspace_config),
         },
     )
+
+
+def _fallback_activo(db) -> bool:
+    from ecomap_web.services import scenes as scene_service
+    from ecomap_web.services import surfaces as surface_service
+
+    hay_caras = any(s["enabled"] for s in surface_service.listar(db))
+    hay_capas = bool(scene_service.serializar(db)["layers"])
+    return hay_caras and not hay_capas
 
 
 @router.get("/healthz", include_in_schema=False)

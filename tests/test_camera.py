@@ -231,3 +231,16 @@ async def test_seleccion_entregada_queda_en_opening_no_en_el_estado_viejo(client
     assert cuerpo["state"] == "opening"
     assert cuerpo["source"] == FAKE_URI
     assert cuerpo["message"] is None
+
+
+def test_el_evento_de_camara_se_construye_bien():
+    """Regresion: un parche mal anclado metio una constante de mas dentro de
+    esta llamada, y `ev()` es posicional-solo, asi que el render explotaba al
+    reportar un error de camara — justo en el camino de error."""
+    from ecomap_core.protocol import EV_CAMERA, ev
+
+    mensaje = ev(EV_CAMERA, state="open", source="fake://", width=640, height=480, backend="fake")
+
+    assert mensaje["ev"] == "camera"
+    assert mensaje["state"] == "open"
+    assert mensaje["width"] == 640

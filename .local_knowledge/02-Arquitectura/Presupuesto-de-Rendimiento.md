@@ -22,7 +22,7 @@ los números de abajo son presupuesto, no observación. Qué medir: [[Mini-PC-Se
 
 | Etapa | Presupuesto | Nota |
 |---|---|---|
-| Efectos (todas las capas) | 8 ms | FBOs a resolución de la superficie, no de pantalla |
+| Efectos (todas las capas) | 8 ms | FBO por capa, al bounding box de su superficie (implementado en US-13) |
 | Warp + compose + máscaras | 3 ms | geometría trivial, limitado por fillrate |
 | Swap / vsync | — | bloqueante |
 | Cámara: captura + decodificación MJPEG | ~25 % de un core | webcam USB 640×480 @ 15 fps |

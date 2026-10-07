@@ -1,0 +1,49 @@
+{
+  "id": "noise_flow",
+  "name": "Flujo de ruido",
+  "version": "1.0.0",
+  "tags": [
+    "abstracto",
+    "organico"
+  ],
+  "needs_camera": false,
+  "cost": "high",
+  "params": [
+    {
+      "key": "speed",
+      "label": "Velocidad",
+      "type": "float",
+      "min": 0.0,
+      "max": 2.0,
+      "default": 0.3
+    },
+    {
+      "key": "scale",
+      "label": "Escala",
+      "type": "float",
+      "min": 1.0,
+      "max": 12.0,
+      "default": 3.0
+    },
+    {
+      "key": "warp",
+      "label": "Distorsion",
+      "type": "float",
+      "min": 0.0,
+      "max": 2.0,
+      "default": 1.0
+    },
+    {
+      "key": "color_a",
+      "label": "Color A",
+      "type": "color",
+      "default": "#1a0b2e"
+    },
+    {
+      "key": "color_b",
+      "label": "Color B",
+      "type": "color",
+      "default": "#ff7849"
+    }
+  ]
+}

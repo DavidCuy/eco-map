@@ -1,0 +1,76 @@
+{# Escenas y capas. Una capa es efecto + cara; una escena es un conjunto
+   activable de un golpe. El orden de la lista es el de apilado: la primera
+   es la de abajo. #}
+<div class="scenes">
+  {% for scene in scenes %}
+  <article class="scene {{ 'scene-active' if scene.is_active else '' }}">
+    <header>
+      <strong>{{ scene.name }}</strong>
+      {% if scene.is_active %}<small class="muted">proyectando</small>{% endif %}
+      {% if scene.is_default %}<small class="muted">arranque</small>{% endif %}
+    </header>
+
+    <ol class="layers">
+      {% for layer in scene.layers %}
+      <li class="{{ '' if layer.enabled else 'muted' }}">
+        <span>{{ layer.effect_name }} → {{ layer.surface_name }}</span>
+        <code>{{ layer.blend_mode }}</code>
+        {% if not layer.effect_available %}<small>⚠ efecto no disponible</small>{% endif %}
+        <span class="acciones">
+          {% if not loop.first %}
+          <button class="outline" title="bajar en el apilado"
+                  hx-post="/api/layers/{{ layer.id }}/move?direction=down"
+                  hx-target="#scenes" hx-swap="innerHTML">↓</button>
+          {% endif %}
+          {% if not loop.last %}
+          <button class="outline" title="subir en el apilado"
+                  hx-post="/api/layers/{{ layer.id }}/move?direction=up"
+                  hx-target="#scenes" hx-swap="innerHTML">↑</button>
+          {% endif %}
+          <button class="outline"
+                  hx-patch="/api/layers/{{ layer.id }}"
+                  hx-ext="json-enc"
+                  hx-vals='{"enabled": {{ 'false' if layer.enabled else 'true' }}}'
+                  hx-target="#scenes" hx-swap="innerHTML">{{ 'ocultar' if layer.enabled else 'mostrar' }}</button>
+          <button class="outline"
+                  hx-delete="/api/layers/{{ layer.id }}"
+                  hx-target="#scenes" hx-swap="innerHTML">borrar</button>
+        </span>
+      </li>
+      {% else %}
+      <li class="muted">Sin capas. El efecto global se proyecta a pantalla completa.</li>
+      {% endfor %}
+    </ol>
+
+    <form class="nueva-capa" hx-post="/api/scenes/{{ scene.id }}/layers"
+          hx-ext="json-enc" hx-target="#scenes" hx-swap="innerHTML">
+      <select name="surface_id" aria-label="Cara">
+        {% for s in surfaces %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+      </select>
+      <select name="effect_id" aria-label="Efecto">
+        {% for e in effects %}{% if e.available %}<option value="{{ e.id }}">{{ e.name }}</option>{% endif %}{% endfor %}
+      </select>
+      <select name="blend_mode" aria-label="Blend">
+        {% for modo in ['normal', 'add', 'multiply', 'screen'] %}<option value="{{ modo }}">{{ modo }}</option>{% endfor %}
+      </select>
+      <button type="submit" {{ 'disabled' if not surfaces or not effects else '' }}>+ capa</button>
+    </form>
+
+    <div class="acciones">
+      {% if not scene.is_active %}
+      <button hx-post="/api/scenes/{{ scene.id }}/activate" hx-target="#scenes" hx-swap="innerHTML">activar</button>
+      {% endif %}
+      <button class="secondary" hx-post="/api/scenes/{{ scene.id }}/default" hx-target="#scenes" hx-swap="innerHTML">de arranque</button>
+      <button class="secondary outline" hx-post="/api/scenes/{{ scene.id }}/duplicate" hx-target="#scenes" hx-swap="innerHTML">duplicar</button>
+      <button class="secondary outline" hx-delete="/api/scenes/{{ scene.id }}" hx-target="#scenes" hx-swap="innerHTML">borrar</button>
+    </div>
+  </article>
+  {% else %}
+  <p class="muted">Sin escenas. Creá una para asignar efectos a las caras.</p>
+  {% endfor %}
+</div>
+
+<form hx-post="/api/scenes" hx-ext="json-enc" hx-target="#scenes" hx-swap="innerHTML" class="nueva-escena">
+  <input type="text" name="name" placeholder="nombre de la escena" required>
+  <button type="submit">+ escena</button>
+</form>
