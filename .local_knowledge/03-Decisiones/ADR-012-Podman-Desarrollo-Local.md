@@ -9,6 +9,12 @@ complementa: ADR-009-Todo-en-Contenedores
 
 **Estado:** aceptada · **Fecha:** 2026-09-29 · **Complementa a** [[ADR-009-Todo-en-Contenedores]]
 
+> [!note] El modo de privilegio cambio
+> Esta ADR eligio Podman y usaba **rootless**. El 2026-10-06 se paso a **rootful** en todos los
+> entornos: ver [[ADR-014-Podman-Rootful]], que explica por que y que costo. La eleccion de Podman
+> frente a Docker sigue vigente; lo que cambio es el modo. Las trampas de rootless de mas abajo se
+> conservan porque siguen siendo ciertas si algun dia se vuelve atras.
+
 ## Contexto
 
 [[ADR-009-Todo-en-Contenedores]] fija que todo corre en contenedores, en todos los entornos, pero no dice con qué runtime. En la máquina de desarrollo se decidió usar **Podman** en vez de Docker.
@@ -30,7 +36,7 @@ Verificado con Podman 6.0.2 rootless sobre WSL2: build de amd64, los dos servici
 
 ## Razones
 
-- **Rootless por defecto.** El contenedor corre como usuario sin privilegios. Para un proyecto que en la Pi va a tocar `/dev/dri`, `/dev/video0` y el D-Bus del sistema, arrancar desde rootless obliga a ser explícito con cada permiso en vez de esconderlo tras un daemon root.
+- ~~**Rootless por defecto.**~~ Esta razón quedó sin efecto: ver [[ADR-014-Podman-Rootful]]. El resto de las razones no dependía del modo.
 - **Sin daemon.** No hay servicio que quede colgado ni que haya que arrancar antes de trabajar.
 - **Sin Docker Desktop.** Evita la dependencia de una licencia comercial para uso corporativo.
 - **Quadlet en la Pi.** Podman integra unidades systemd nativamente (`podman generate systemd` / archivos `.container`), que es más limpio que una unit `oneshot` que llama a `compose up`. Candidato a reemplazar el arranque de [[Despliegue-Raspberry]] en US-28.

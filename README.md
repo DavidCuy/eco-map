@@ -26,8 +26,10 @@ El diagrama completo está en
 
 ### Con contenedores (recomendado, sin hardware)
 
-El runtime de desarrollo es **Podman rootless** con `podman-compose`. Los archivos son OCI y compose
+El runtime es **Podman en modo rootful** con `podman-compose`. Los archivos son OCI y compose
 estándar, así que Docker también sirve; solo cambian los comandos.
+
+En Windows, una vez: `podman machine stop && podman machine set --rootful && podman machine start`.
 
 ```bash
 uv tool install podman-compose          # una vez
@@ -38,6 +40,13 @@ podman-compose -f compose.dev.yml up -d
 - UI: <http://localhost:8000>
 - Preview del render (MJPEG): <http://localhost:8001>
 - API: <http://localhost:8000/docs>
+
+En Windows con la máquina en rootful no hay forward a `localhost`: hay que usar la IP de la VM,
+que cambia al reiniciar WSL.
+
+```bash
+podman machine ssh "ip -4 addr show eth0 | awk '/inet /{print \$2}'"
+```
 
 El render dibuja por CPU con llvmpipe, a 640×360 y 30 fps: sirve para validar lógica y shaders
 simples, **no** para medir rendimiento.

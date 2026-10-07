@@ -6,9 +6,24 @@ tags: [operacion, docker, dev]
 
 Único modo de ejecución, en desarrollo y en la Pi. Ver [[ADR-009-Todo-en-Contenedores]].
 
-**Runtime en desarrollo local: Podman rootless con `podman-compose`.** Los archivos son OCI y
-compose estándar, así que sirven igual con Docker; lo que cambia son los comandos. Detalle y
-trampas verificadas en [[ADR-012-Podman-Desarrollo-Local]].
+**Runtime: Podman en modo rootful con `podman-compose`**, en los tres entornos
+([[ADR-012-Podman-Desarrollo-Local]], [[ADR-014-Podman-Rootful]]). Los archivos son OCI y compose
+estándar, así que sirven igual con Docker; lo que cambia son los comandos.
+
+En Windows hay que poner la máquina en rootful una vez, con la VM detenida:
+
+```bash
+podman machine stop && podman machine set --rootful && podman machine start
+podman info --format '{{.Host.Security.Rootless}}'    # false
+```
+
+**Ojo con el acceso desde Windows:** en rootful se pierde el forward de gvproxy, así que la UI no
+está en `localhost` sino en la IP de la VM, que cambia con cada reinicio de WSL:
+
+```bash
+podman machine ssh "ip -4 addr show eth0 | awk '/inet /{print \$2}'"
+# -> 172.20.251.180/20  =>  http://172.20.251.180:8000
+```
 
 ```bash
 uv tool install podman-compose          # una vez

@@ -44,26 +44,28 @@ ls -l /dev/dri/            # debe existir card0 y renderD128
 sudo apt install -y mesa-utils && glxinfo -B | grep -E 'OpenGL (renderer|version)'
 ```
 
-## Rootless o root
+## Privilegios: rootful
 
-Rootless alcanza, con dos condiciones:
-
-1. El usuario del servicio pertenece a `video` y `render`, **y volvió a iniciar sesión** después
-   del `usermod`: `keep-groups` pasa los grupos que el proceso ya tiene, no los busca de nuevo.
-2. El compose usa `group_add: [keep-groups]`, no la lista de grupos. Ver
-   [[ADR-012-Podman-Desarrollo-Local]].
+Se corre con **Podman rootful** ([[ADR-014-Podman-Rootful]]), así que el acceso a `/dev/dri`,
+`/dev/video0` y al D-Bus del sistema sale sin trámite:
 
 ```bash
-id                          # deben aparecer video y render
-ls -l /dev/dri/card0        # en Debian: root:video 0660
-podman info --format '{{.Host.Security.Rootless}} {{.Host.OCIRuntime.Name}}'   # true crun
+sudo podman build --target runtime -t ecomap:latest .
+sudo podman-compose -f compose.minipc.yml up -d
 ```
 
-El otro requisito es que **nada más tenga el DRM master**: sin servidor X ni Wayland corriendo, el
-contenedor lo toma sin privilegios. Por eso el host va sin entorno gráfico.
+El único requisito que queda es que **nada más tenga el DRM master**: sin servidor X ni Wayland
+corriendo, el contenedor de render lo toma. Por eso el host va sin entorno gráfico.
 
-Lo que sí puede necesitar root más adelante es la configuración de wifi del Hito 3: polkit deniega
-por defecto que un usuario sin privilegios controle NetworkManager.
+Comprobaciones útiles:
+
+```bash
+ls -l /dev/dri/            # card0 y renderD128
+sudo podman info --format '{{.Host.Security.Rootless}} {{.Host.OCIRuntime.Name}}'   # false crun
+```
+
+El `usermod -aG video,render` de más arriba deja de ser imprescindible con rootful, pero conviene
+igual: permite depurar a mano (`glxinfo`, `v4l2-ctl`) sin `sudo`.
 
 ## Diferencias frente a la Raspberry Pi
 

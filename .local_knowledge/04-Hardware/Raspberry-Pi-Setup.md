@@ -36,7 +36,8 @@ Paquetes:
 ```bash
 sudo apt install -y python3-picamera2 libcamera-apps \
   libgl1-mesa-dri libegl1 libdrm2 avahi-daemon git
-sudo usermod -aG video,render "$USER"   # acceso a /dev/dri
+sudo usermod -aG video,render "$USER"   # para depurar a mano; con Podman rootful
+                                        # el contenedor no lo necesita (ADR-014)
 ```
 
 ## Térmica

@@ -24,6 +24,7 @@ La Pi se configura sin teclado: escanear wifi, conectarse, modo AP de rescate y 
 Consecuencias de seguridad de esa capacidad, y cómo se acotan:
 
 - El contenedor web monta el **socket D-Bus del sistema** para hablar con NetworkManager. Es la mayor elevación de privilegio del diseño: control de la red del host. Se limita a ese contenedor y a ese módulo. Ver [[ADR-009-Todo-en-Contenedores]].
+- Los contenedores corren **como root** ([[ADR-014-Podman-Rootful]]), así que un escape es root en el host. Se acepta por el contexto de propósito único, y es una razón más para no exponer el equipo a internet nunca.
 - La **PSK nunca toca `ecomap.db`** ni los logs: la guarda NetworkManager. En los logs se enmascara.
 - `GET /api/network/networks` expone las redes vecinas — información de reconocimiento. Aceptado en LAN; primer endpoint a proteger cuando haya auth.
 - Rate limit en los endpoints de red: probar PSKs desde la misma LAN es un ataque plausible.

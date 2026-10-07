@@ -48,14 +48,13 @@ services:
       # Webcam por ruta estable (Hito 4). Ojo con el bus USB 2.0 compartido:
       # conviene no colgarla del mismo controlador que un SSD USB.
       # - /dev/v4l/by-id/usb-XXXX-video-index0:/dev/video0
-    # En rootless, listar los grupos (video, render) NO sirve: agrega grupos
-    # locales al user namespace y el device sigue inaccesible. keep-groups le
-    # dice a crun que no llame a setgroups, asi el proceso conserva los grupos
-    # del usuario que lanzo el contenedor. Requiere crun y es exclusivo: no se
-    # puede combinar con otros grupos. Con Docker (root) cambiar por
-    # [video, render].
+    # Modo rootful (ADR-014): el contenedor corre como root, asi que los grupos
+    # se listan normalmente. Si algun dia se vuelve a rootless, esto tiene que
+    # ser `group_add: [keep-groups]`: en un user namespace, listar los grupos
+    # agrega grupos locales y el device queda inaccesible.
     group_add:
-      - keep-groups
+      - video
+      - render
     volumes:
       - ecomap-effects:/effects:ro
       - ecomap-media:/media:ro
