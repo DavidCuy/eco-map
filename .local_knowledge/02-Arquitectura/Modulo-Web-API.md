@@ -20,9 +20,9 @@ Reparto de trabajo:
 
 | Ruta | Pantalla |
 |---|---|
-| `/` | Dashboard: escena activa, fps, temp, botón blackout |
+| `/` | Workspace de calibración: canvas con handles, barra de estado, tira de caras. Ver [[Direccion-de-UI]] |
 | `/surfaces` | Lista y alta de superficies |
-| `/surfaces/{id}/calibrate` | Editor de calibración (canvas + handles) |
+| ~~`/surfaces/{id}/calibrate`~~ | Absorbido por `/`: una sola pantalla con la cara activa |
 | `/effects` | Catálogo de efectos con preview |
 | `/scenes` | Escenas: crear, activar, duplicar |
 | `/scenes/{id}` | Editor: capas, orden, parámetros |

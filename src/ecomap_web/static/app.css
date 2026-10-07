@@ -1,46 +1,167 @@
-/* Estilos propios de Eco-Map. Todo lo demas viene de Pico.
-   Se opera a oscuras, al lado del proyector: contraste alto y nada de blancos. */
+/* Estilos propios de Eco-Map. Todo lo demás viene de Pico.
+   Se opera a oscuras, de pie, con una mano, mirando la pared y no la pantalla:
+   de ahí el canvas grande, los controles gordos y el contraste alto. */
 
 :root {
   --ecomap-up: #2ecc71;
   --ecomap-down: #e74c3c;
+  --ecomap-accent: #00e6c8;
 }
+
+/* --- layout del workspace --- */
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.statusbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  align-items: baseline;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--pico-border-radius);
+  background: var(--pico-card-background-color);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.statusbar b { font-size: 1.05rem; }
+
+/* El canvas manda: es la pantalla, no una tarjeta más. */
+.stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: var(--pico-border-radius);
+  overflow: hidden;
+  touch-action: none; /* el arrastre de handles no debe hacer scroll */
+}
+
+.stage .preview,
+.stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.stage .preview { object-fit: fill; }
+.stage canvas { cursor: crosshair; }
+
+/* Recuadro ampliado de la esquina activa: sin esto el último píxel se ajusta
+   a ciegas. */
+.zoom {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  width: 140px;
+  height: 140px;
+  border: 1px solid var(--ecomap-accent);
+  border-radius: var(--pico-border-radius);
+  background-repeat: no-repeat;
+  background-color: #000;
+  pointer-events: none;
+}
+
+.zoom .crosshair {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border: 1px solid var(--ecomap-accent);
+  border-radius: 50%;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.toolbar button,
+.toolbar select {
+  margin: 0;
+  width: auto;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.9rem;
+}
+
+/* --- tira de caras --- */
+
+.strip {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding-bottom: 0.2rem;
+}
+
+.chip {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin: 0;
+  padding: 0.45rem 0.8rem;
+  width: auto;
+  font-size: 0.85rem;
+  background: var(--pico-card-background-color);
+  color: var(--pico-color);
+  border: 1px solid transparent;
+}
+
+.chip-active { border-color: var(--ecomap-accent); }
+.chip-off { opacity: 0.45; }
+
+.panel {
+  margin: 0;
+  padding: 0.3rem 0.8rem;
+  background: var(--pico-card-background-color);
+  border-radius: var(--pico-border-radius);
+}
+
+.panel summary { font-size: 0.9rem; }
+
+.error {
+  margin: 0;
+  padding: 0.5rem 0.8rem;
+  border-radius: var(--pico-border-radius);
+  background: color-mix(in srgb, var(--ecomap-down) 25%, transparent);
+  font-size: 0.9rem;
+}
+
+/* --- varios --- */
 
 .dot {
   display: inline-block;
   width: 0.7rem;
   height: 0.7rem;
   border-radius: 50%;
-  margin-right: 0.4rem;
+  margin-right: 0.3rem;
   vertical-align: middle;
 }
 
 .dot-up { background: var(--ecomap-up); }
 .dot-down { background: var(--ecomap-down); }
 
-.metrics h3 {
-  margin: 0.1rem 0 0;
-  font-variant-numeric: tabular-nums;
-}
-
-.metrics small {
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  opacity: 0.7;
-}
-
 .muted { opacity: 0.6; }
 
 .logs {
   list-style: none;
   padding-left: 0;
-  margin-bottom: 0;
-  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
 }
 
 .logs li { padding: 0.15rem 0; }
 
-/* En celular los botones de control quedan apilados y grandes: se usan a oscuras. */
 @media (max-width: 640px) {
-  .grid > button { min-height: 3rem; }
+  .toolbar button,
+  .toolbar select { min-height: 2.8rem; }
+  .zoom { width: 110px; height: 110px; }
 }

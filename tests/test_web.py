@@ -95,3 +95,48 @@ async def test_telemetria_del_bus_actualiza_el_estado(cliente):
     assert cuerpo["temp"] == 54.1
     # El socket sigue caido, asi que el render no cuenta como vivo.
     assert cuerpo["render_up"] is False
+
+
+async def test_el_dashboard_es_el_workspace_de_calibracion(cliente):
+    """El dashboard dejo de ser una pila de tarjetas: ahora el canvas manda."""
+    client, _ = cliente
+    await client.post("/api/surfaces", json={"name": "frontal"})
+
+    html = (await client.get("/")).text
+
+    assert 'workspace(JSON.parse(' in html
+    assert "<canvas" in html
+    assert "/static/calibrate.js" in html
+    # La configuracion viaja como JSON embebido: la malla puede tener cientos
+    # de puntos y no entra en atributos sueltos.
+    assert '"surfaces"' in html and '"frontal"' in html
+    assert '"previewUrl"' in html and '"output"' in html
+
+
+async def test_el_dashboard_conserva_la_telemetria(cliente):
+    """Lo tecnico no se pierde con el rediseno: es lo que dice si el equipo
+    esta sufriendo, y ninguna app comercial lo muestra."""
+    client, _ = cliente
+
+    html = (await client.get("/")).text
+
+    for campo in ("fps", "frame_ms", "render_up", "temp"):
+        assert campo in html
+
+
+async def test_el_dashboard_funciona_sin_superficies(cliente):
+    client, _ = cliente
+    html = (await client.get("/")).text
+    assert '"surfaces": []' in html
+
+
+async def test_un_nombre_de_superficie_no_puede_inyectar_html(cliente):
+    """El JSON del workspace va dentro de un <script>: si un nombre pudiera
+    cerrar la etiqueta, seria inyeccion de codigo."""
+    client, _ = cliente
+    await client.post("/api/surfaces", json={"name": "</script><img src=x>"})
+
+    html = (await client.get("/")).text
+
+    assert "</script><img src=x>" not in html
+    assert "\u003c/script" in html
