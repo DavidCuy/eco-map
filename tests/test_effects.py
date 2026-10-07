@@ -405,3 +405,71 @@ async def test_el_paso_del_control_sale_del_manifiesto(cliente):
 
     assert 'name="cells"' in html
     assert 'step="1.0"' in html or 'step="1"' in html
+
+
+# --- los tres efectos del catalogo v1 (#15) ------------------------------
+
+EFECTOS_V1 = ("plasma", "waves", "noise_flow")
+
+
+@pytest.mark.parametrize("effect_id", EFECTOS_V1)
+def test_los_efectos_v1_cargan_con_preview(effect_id: str):
+    efecto = load_effect(EFFECTS_DIR / effect_id)
+
+    assert efecto.has_preview, "el catalogo los muestra con preview"
+    assert efecto.manifest.name
+
+
+@pytest.mark.parametrize("effect_id", EFECTOS_V1)
+def test_los_efectos_v1_tienen_velocidad_escala_y_color(effect_id: str):
+    efecto = load_effect(EFFECTS_DIR / effect_id)
+    claves = {p.key for p in efecto.manifest.params}
+    tipos = {p.key: p.type for p in efecto.manifest.params}
+
+    assert "speed" in claves and "scale" in claves
+    assert any(t == "color" for t in tipos.values())
+
+
+@pytest.mark.parametrize("effect_id", EFECTOS_V1)
+def test_los_shaders_no_usan_bucles_de_cota_dinamica(effect_id: str):
+    """El compilador del V3D no puede desenrollar un bucle de cota dinamica.
+
+    Es el tipo de cosa que compila en el escritorio y falla o se arrastra en la
+    Pi, y no lo podemos detectar sin hardware: por eso se revisa el fuente.
+    """
+    import re
+
+    fuente = (EFFECTS_DIR / effect_id / "frag.glsl").read_text(encoding="utf-8")
+    for condicion in re.findall(r"for\s*\([^;]*;([^;]*);", fuente):
+        assert re.search(r"<\s*\d+", condicion), (
+            f"{effect_id}: bucle con cota no literal ({condicion.strip()})"
+        )
+
+
+@pytest.mark.parametrize("effect_id", EFECTOS_V1)
+def test_los_shaders_no_usan_pow_dentro_de_bucles(effect_id: str):
+    fuente = (EFFECTS_DIR / effect_id / "frag.glsl").read_text(encoding="utf-8")
+    dentro = False
+    for linea in fuente.splitlines():
+        if "for (" in linea or "for(" in linea:
+            dentro = True
+        if dentro and "pow(" in linea:
+            raise AssertionError(f"{effect_id}: pow() dentro de un bucle")
+        if dentro and "}" in linea:
+            dentro = False
+
+
+def test_el_ruido_usa_highp_en_el_hash():
+    """Con `mediump`, fract(sin(x) * 43758.0) pierde bits y el ruido se
+    degrada en bandas. El header global declara mediump, asi que el hash tiene
+    que pedir highp explicito. Otro caso que solo se ve en la Pi."""
+    fuente = (EFFECTS_DIR / "noise_flow" / "frag.glsl").read_text(encoding="utf-8")
+    hash_fn = fuente.split("float hash(")[1].split("}")[0]
+    assert "highp" in hash_fn
+
+
+def test_waves_cae_al_centro_sin_camara():
+    """Sin camara `u_motion` vale 0; el origen tiene que quedar en el centro en
+    vez de pegarse a una esquina."""
+    fuente = (EFFECTS_DIR / "waves" / "frag.glsl").read_text(encoding="utf-8")
+    assert "mix(vec2(0.5), u_motion_pos" in fuente

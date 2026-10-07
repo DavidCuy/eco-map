@@ -103,21 +103,36 @@ El manifiesto **genera la UI sola**: FastAPI lo valida con Pydantic y Jinja2 pin
 
 ## Catálogo v1 propuesto
 
-| Efecto | Costo | Notas |
-|---|---|---|
-| `solid` | nulo | color plano; sirve para alinear y para máscaras |
-| `grid_test` | nulo | ajedrez + esquinas numeradas; **obligatorio** para calibrar |
-| `plasma` | bajo | ruido sinusoidal clásico |
-| `noise_flow` | medio | simplex + domain warping |
-| `waves` | bajo | ondas concéntricas, reactivas a `u_motion_pos` |
+| Efecto | Costo | `frame_ms` | Notas |
+|---|---|---|---|
+| `solid` | nulo | 1.46 | color plano; sirve para alinear y medir el derrame |
+| `grid_test` | nulo | 3.61 | ajedrez, marco y esquinas de colores; **obligatorio** para calibrar |
+| `plasma` | bajo | 5.65 | cuatro senos; nada de bucles ni texturas |
+| `waves` | bajo | 6.09 | ondas concéntricas; el origen sigue a `u_motion_pos` |
+| `noise_flow` | alto | 18.09 | ruido de valor con domain warping |
+
+Los `frame_ms` son a 640×360 bajo **llvmpipe**, que es render por CPU: sirven para comparar efectos
+entre sí, no para predecir la Pi. Medirlos en hardware está en la checklist del issue de validación.
+
+`noise_flow` arrancó en **27.8 ms** con cuatro octavas, contra un presupuesto de 33. El domain
+warping evalúa el fbm cinco veces por píxel, así que cada octava cuesta cinco veces; con tres bajó a
+18.09 y el detalle que se pierde no se ve a distancia de proyección.
 | `particles` | alto | transform feedback o compute; 30 fps objetivo |
 | `video_loop` | medio | reproducir mp4 (decodificación HW, `v4l2m2m`) |
 | `camera_echo` | medio | feedback de cámara con delay y desplazamiento — el efecto "eco" que da nombre al proyecto |
 
 ## Reglas para escribir shaders
 
-- `precision mediump float;` por defecto en la Pi; `highp` solo si hace falta (cuesta).
+- `precision mediump float;` por defecto en la Pi; `highp` solo donde haga falta, porque cuesta.
+  Dónde hace falta de verdad: un hash tipo `fract(sin(x) * 43758.0)` pierde bits con mediump y el
+  ruido se degrada en bandas visibles. `noise_flow` pide `highp` explícito por eso.
 - Nada de `for` con cota dinámica ni `pow` en bucle: el V3D lo sufre.
+- **Hay tests que revisan estas dos reglas leyendo el fuente.** No reemplazan probar en la Pi, pero
+  atrapan el error antes de que llegue ahí, que es donde no podemos depurar todavía.
+- Corregir el aspecto con `u_resolution`: sin eso el patrón se estira, y las superficies casi nunca
+  son cuadradas.
+- Degradarse solo cuando falta una entrada: `waves` usa `u_motion_pos` como origen, y sin cámara
+  `u_motion` vale 0 y el origen queda en el centro en vez de pegarse a una esquina.
 - Cada efecto debe verse decente con todos los parámetros en default.
 - Normalizar por `u_resolution`, nunca asumir 1920×1080.
 

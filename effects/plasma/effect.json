@@ -1,0 +1,15 @@
+{
+  "id": "plasma",
+  "name": "Plasma",
+  "version": "1.0.0",
+  "tags": ["abstracto", "loop"],
+  "needs_camera": false,
+  "cost": "low",
+  "params": [
+    {"key": "speed", "label": "Velocidad", "type": "float", "min": 0.0, "max": 3.0, "default": 1.0},
+    {"key": "scale", "label": "Escala", "type": "float", "min": 1.0, "max": 20.0, "default": 6.0},
+    {"key": "color_a", "label": "Color A", "type": "color", "default": "#06283d"},
+    {"key": "color_b", "label": "Color B", "type": "color", "default": "#00e6c8"},
+    {"key": "brightness", "label": "Brillo", "type": "float", "min": 0.0, "max": 1.0, "default": 1.0}
+  ]
+}
