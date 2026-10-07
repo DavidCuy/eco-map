@@ -200,16 +200,26 @@ async def test_listar_efectos(cliente):
     assert {p["key"] for p in grid["params"]} == {"cells", "contrast", "corners"}
 
 
-async def test_activar_efecto_persiste_y_avisa_al_render(cliente):
+async def test_activar_efecto_avisa_al_render_al_instante_y_al_disco_despues(cliente):
+    """Lo que se ve viaja ya; lo que desgasta la tarjeta espera (US-14)."""
     client, app, enviados = cliente
 
     respuesta = await client.post("/api/effects/active", json={"id": "solid", "params": {}})
 
     assert respuesta.status_code == 200
     assert app.state.app_state.effect == "solid"
-    fila = app.state.db.execute("SELECT value FROM setting WHERE key = 'active_effect'").fetchone()
-    assert fila["value"] == "solid"
     assert [m for m in enviados if m.get("op") == "effect"][-1]["id"] == "solid"
+    # En disco sigue el valor anterior: la escritura todavia no salio
+    def guardado() -> str:
+        return app.state.db.execute(
+            "SELECT value FROM setting WHERE key = 'active_effect'"
+        ).fetchone()["value"]
+
+    assert guardado() == "grid_test"  # el que siembra la migracion 002
+
+    await app.state.writer.flush()
+
+    assert guardado() == "solid"
 
 
 async def test_activar_efecto_inexistente(cliente):
@@ -335,6 +345,7 @@ async def test_solo_se_guardan_los_overrides(cliente):
     client, app, _ = cliente
 
     await client.post("/api/effects/active", json={"id": "grid_test", "params": {"cells": 24}})
+    await app.state.writer.flush()
 
     guardado = app.state.db.execute(
         "SELECT value FROM setting WHERE key = 'active_effect_params'"
@@ -375,9 +386,13 @@ async def test_la_ui_de_parametros_se_genera_desde_el_manifiesto(cliente):
 
     assert 'type="range"' in html  # cells y contrast son float
     assert 'type="checkbox"' in html  # corners es bool
-    assert 'name="cells"' in html and 'name="corners"' in html
+    assert 'data-param="cells"' in html and 'data-param="corners"' in html
     assert 'min="4.0"' in html and 'max="48.0"' in html  # rango del manifiesto
     assert "Restaurar valores por defecto" in html
+    # Los controles no llevan HTMX: los maneja params.js, porque intercambiar
+    # el fragmento mientras se arrastra arranca el slider del dedo (US-14).
+    bloque_params = html.split('class="params"')[1].split("</div>")[0]
+    assert "hx-put" not in bloque_params
 
 
 async def test_el_color_se_renderiza_como_color_picker(cliente):
@@ -403,7 +418,7 @@ async def test_el_paso_del_control_sale_del_manifiesto(cliente):
         )
     ).text
 
-    assert 'name="cells"' in html
+    assert 'data-param="cells"' in html
     assert 'step="1.0"' in html or 'step="1"' in html
 
 
@@ -473,3 +488,68 @@ def test_waves_cae_al_centro_sin_camara():
     vez de pegarse a una esquina."""
     fuente = (EFFECTS_DIR / "waves" / "frag.glsl").read_text(encoding="utf-8")
     assert "mix(vec2(0.5), u_motion_pos" in fuente
+
+
+# --- escritura diferida (#14) --------------------------------------------
+
+
+async def test_un_arrastre_largo_termina_en_una_sola_escritura(cliente):
+    """El criterio de la US: un arrastre no puede escribir una vez por frame.
+
+    Son 40 cambios, los que genera mover un slider un par de segundos.
+    """
+    client, app, enviados = cliente
+    await client.post("/api/effects/active", json={"id": "grid_test"})
+    await app.state.writer.flush()
+    escrituras_antes = app.state.writer.writes
+
+    for valor in range(4, 44):
+        await client.put("/api/effects/active/params", json={"params": {"cells": valor}})
+
+    # Durante el arrastre: ninguna escritura nueva...
+    assert app.state.writer.writes == escrituras_antes
+    # ...pero el render recibio los 40 valores, porque es lo que se ve.
+    efectos = [m for m in enviados if m.get("op") == "effect"]
+    assert efectos[-1]["params"]["cells"] == 43
+    assert len([m for m in efectos if "cells" in m.get("params", {})]) >= 40
+
+    await app.state.writer.flush()
+
+    # Al calmarse, una sola escritura por clave, con el ultimo valor.
+    assert app.state.writer.writes - escrituras_antes <= 2
+    guardado = app.state.db.execute(
+        "SELECT value FROM setting WHERE key = 'active_effect_params'"
+    ).fetchone()
+    assert json.loads(guardado["value"])["cells"] == 43
+
+
+async def test_el_ultimo_valor_no_se_pierde_al_cerrar(cliente):
+    """flush() corre en el cierre de la app: cerrar la pestana en medio de un
+    arrastre no puede perder el valor."""
+    client, app, _ = cliente
+    await client.post("/api/effects/active", json={"id": "grid_test", "params": {"cells": 31}})
+
+    await app.state.writer.flush()  # es lo que hace el lifespan al cerrar
+
+    guardado = app.state.db.execute(
+        "SELECT value FROM setting WHERE key = 'active_effect_params'"
+    ).fetchone()
+    assert json.loads(guardado["value"])["cells"] == 31
+
+
+async def test_con_el_render_caido_el_valor_igual_se_persiste(cliente):
+    client, app, _ = cliente
+
+    async def caido(_message):
+        return False
+
+    app.state.bus.send = caido
+    await client.post("/api/effects/active", json={"id": "solid", "params": {"brightness": 0.5}})
+    await app.state.writer.flush()
+
+    guardado = app.state.db.execute(
+        "SELECT value FROM setting WHERE key = 'active_effect_params'"
+    ).fetchone()
+    assert json.loads(guardado["value"])["brightness"] == 0.5
+    eventos = app.state.db.execute("SELECT message FROM event_log").fetchall()
+    assert any("render no estaba conectado" in e["message"] for e in eventos)

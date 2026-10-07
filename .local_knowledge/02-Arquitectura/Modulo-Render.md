@@ -25,6 +25,14 @@ while running:
     telemetry.tick()           # fps, frame time, temp cada 1 s
 ```
 
+## Latencia de un cambio
+
+El render mide `apply_ms`: de operación recibida a frame presentado. Es el tramo que controla; el
+resto de la latencia es navegador, HTTP y bus, y se mide del otro lado.
+
+Medido en desarrollo: 4.74 ms. A 30 fps el período es 33 ms, así que ese número dice que la
+operación se aplicó dentro del frame en curso y no esperó al siguiente.
+
 ## Capas y FBO
 
 Desde US-13 el render dibuja **capas**, no superficies: cada capa es un efecto sobre una superficie,

@@ -362,7 +362,9 @@ async def test_el_efecto_de_fallback_viaja_por_dos_caminos(cliente):
     assert efectos[-1]["id"] == "grid_test"
     assert efectos[-1]["params"] == {"cells": 8}
 
-    # Camino de reconexion: la escena serializada lo lleva
+    # Camino de reconexion: la escena serializada lo lleva, una vez que la
+    # escritura diferida se volco (US-14).
+    await app.state.writer.flush()
     from ecomap_web.services import scenes as scene_service
 
     escena = scene_service.serializar(app.state.db)

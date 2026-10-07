@@ -18,7 +18,7 @@ from ecomap_core.effects import PREVIEW_NAME, EffectManifest, resolve_params
 from ecomap_core.protocol import OP_EFFECT, OP_EFFECTS_RELOAD, op
 from ecomap_core.schemas import EffectActive, EffectOut, EffectSelect, ParamsIn
 from ecomap_web.db import log_event, set_setting
-from ecomap_web.deps import BusDep, DbDep, SettingsDep, StateDep, build_status
+from ecomap_web.deps import BusDep, DbDep, SettingsDep, StateDep, WriterDep, build_status
 from ecomap_web.routers.pages import render_fragment
 from ecomap_web.services import effects as service
 
@@ -101,7 +101,12 @@ def preview(effect_id: str, settings: SettingsDep) -> FileResponse:
 
 @router.post("/active", response_model=EffectActive)
 async def activar(
-    payload: EffectSelect, request: Request, bus: BusDep, state: StateDep, db: DbDep
+    payload: EffectSelect,
+    request: Request,
+    bus: BusDep,
+    state: StateDep,
+    db: DbDep,
+    writer: WriterDep,
 ) -> Response | EffectActive:
     elegido = service.obtener(db, payload.id)
     if elegido is None:
@@ -112,13 +117,18 @@ async def activar(
     state.effect = payload.id
     state.effect_params = payload.params
     state.effect_error = None
-    await _aplicar(bus, db, state)
+    await _aplicar(bus, db, state, writer)
     return _respuesta(request, db, state)
 
 
 @router.put("/active/params", response_model=EffectActive)
 async def actualizar_params(
-    payload: ParamsIn, request: Request, bus: BusDep, state: StateDep, db: DbDep
+    payload: ParamsIn,
+    request: Request,
+    bus: BusDep,
+    state: StateDep,
+    db: DbDep,
+    writer: WriterDep,
 ) -> Response | EffectActive:
     """Mezcla parcial: lo que no viene, no se toca.
 
@@ -128,27 +138,38 @@ async def actualizar_params(
     if state.effect is None:
         raise HTTPException(HTTP_422, "no hay efecto activo")
     state.effect_params = {**state.effect_params, **payload.params}
-    await _aplicar(bus, db, state)
+    await _aplicar(bus, db, state, writer)
     return _respuesta(request, db, state)
 
 
 @router.post("/active/reset", response_model=EffectActive)
 async def resetear_params(
-    request: Request, bus: BusDep, state: StateDep, db: DbDep
+    request: Request, bus: BusDep, state: StateDep, db: DbDep, writer: WriterDep
 ) -> Response | EffectActive:
     """Vuelve a los valores por defecto: se **descartan los overrides**, no se
     copian los defaults. Así el efecto sigue heredando si cambia de versión."""
     if state.effect is None:
         raise HTTPException(HTTP_422, "no hay efecto activo")
     state.effect_params = {}
-    await _aplicar(bus, db, state)
+    await _aplicar(bus, db, state, writer)
     return _respuesta(request, db, state)
 
 
-async def _aplicar(bus, db, state) -> None:
+async def _aplicar(bus, db, state, writer) -> None:
+    """El valor viaja **siempre** por el socket; el disco espera.
+
+    Es lo que se ve contra lo que se desgasta: en medio de un arrastre, lo
+    unico que importa es que el render lo aplique (ADR-004).
+    """
+    efecto = state.effect or ""
+    params = json.dumps(state.effect_params)
     entregado = await bus.send(op(OP_EFFECT, id=state.effect, params=state.effect_params))
-    set_setting(db, "active_effect", state.effect or "")
-    set_setting(db, "active_effect_params", json.dumps(state.effect_params))
+
+    writer.schedule("active_effect", lambda: set_setting(db, "active_effect", efecto))
+    writer.schedule(
+        "active_effect_params", lambda: set_setting(db, "active_effect_params", params)
+    )
+
     if not entregado:
         log_event(db, "warn", "web", "efecto guardado pero el render no estaba conectado")
 

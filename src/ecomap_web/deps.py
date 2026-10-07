@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends, Request
 
@@ -34,10 +34,15 @@ def get_state(request: Request) -> AppState:
     return request.app.state.app_state
 
 
+def get_writer(request: Request):
+    return request.app.state.writer
+
+
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 DbDep = Annotated[sqlite3.Connection, Depends(get_db)]
 BusDep = Annotated[BusClient, Depends(get_bus)]
 StateDep = Annotated[AppState, Depends(get_state)]
+WriterDep = Annotated[Any, Depends(get_writer)]
 
 
 def render_up(bus: BusClient, state: AppState) -> bool:
@@ -58,6 +63,7 @@ def build_status(bus: BusClient, state: AppState, version: str) -> SystemStatus:
         fps=tele.fps,
         frame_ms=tele.frame_ms,
         frame_ms_max=tele.frame_ms_max,
+        apply_ms=tele.apply_ms,
         temp=tele.temp,
         dropped=tele.dropped,
         scene_id=tele.scene_id,

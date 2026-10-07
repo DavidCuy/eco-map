@@ -18,6 +18,9 @@ class Telemetry(BaseModel):
     fps: float = 0.0
     frame_ms: float = 0.0
     frame_ms_max: float = 0.0
+    # De operacion recibida a frame presentado: el tramo de la latencia que el
+    # render controla (RNF-2).
+    apply_ms: float = 0.0
     temp: float | None = None
     dropped: int = 0
     scene_id: int | None = None
@@ -32,6 +35,7 @@ class SystemStatus(BaseModel):
     fps: float
     frame_ms: float
     frame_ms_max: float
+    apply_ms: float
     temp: float | None
     dropped: int
     scene_id: int | None

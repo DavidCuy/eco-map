@@ -48,9 +48,14 @@ trabajan sobre los puntos sin ida y vuelta al servidor. Intercambiar HTML desde 
 parte dejaría dos copias del mismo estado desincronizándose, así que el workspace usa Alpine con
 `fetch` contra la API JSON.
 
-Los paneles que son solo formularios — efecto activo, blackout, cámara — siguen con HTMX, que para
-eso es más simple. La convención de doble representación ([[Modulo-Web-API]]) sigue valiendo para
-ellos.
+Los paneles que son solo formularios — efecto activo, blackout, cámara, escenas — siguen con HTMX,
+que para eso es más simple. La convención de doble representación ([[Modulo-Web-API]]) sigue
+valiendo para ellos.
+
+**Los sliders de parámetros tampoco usan HTMX**, por la misma razón que el canvas: cada respuesta de
+HTMX reemplaza el fragmento entero, y hacer eso mientras el dedo arrastra arranca el control. La
+regla que sale de esto: *si el usuario está interactuando de forma continua, el servidor no puede
+reemplazarle el DOM debajo*. Formularios con HTMX; arrastres, con JS.
 
 ## Estado: implementado
 

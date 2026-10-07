@@ -25,6 +25,7 @@ from ecomap_web.db import connect, get_setting
 from ecomap_web.routers import camera, effects, pages, scenes, surfaces, system, ws
 from ecomap_web.services import effects as effect_service
 from ecomap_web.services import scenes as scene_service
+from ecomap_web.services.persist import DebouncedWriter
 from ecomap_web.state import AppState
 
 log = logging.getLogger(__name__)
@@ -88,10 +89,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.bus = bus
         app.state.app_state = state
         app.state.version = _version()
+        # Las escrituras de parametros se agrupan: ver services/persist.py.
+        app.state.writer = DebouncedWriter()
         log.info("web listo en http://%s:%s", settings.host, settings.port)
         try:
             yield
         finally:
+            # Primero se vuelca lo pendiente y despues se cierra la base: si no,
+            # el ultimo valor de un arrastre se perderia al salir.
+            await app.state.writer.flush()
             await bus.stop()
             conn.close()
 

@@ -231,3 +231,6 @@
 .nueva-escena input, .nueva-escena button {
   margin: 0; width: auto; flex: 1 1 auto; font-size: 0.85rem; padding: 0.3rem 0.5rem;
 }
+
+/* El valor del slider se actualiza mientras se arrastra, sin ir al servidor. */
+.param [data-param-valor] { font-variant-numeric: tabular-nums; }

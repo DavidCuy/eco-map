@@ -138,7 +138,14 @@ sequenceDiagram
     W-->>B: WebSocket: telemetría
 ```
 
-Latencia percibida = throttle + HTTP local + un frame ≈ **60–80 ms**, dentro de RNF-2. La escritura a disco queda fuera del camino crítico: protege la SD y no agrega latencia. Ver [[ADR-004-SQLite]].
+**Medido** (contenedor de desarrollo, llvmpipe, 30 fps): 9.5 ms de evento del navegador a respuesta
+HTTP — que incluye el envío por el bus — y 4.74 ms del lado del render, de operación recibida a
+frame presentado. Con el throttle de 50 ms en el peor caso, el total queda en ~64 ms, dentro de los
+100 ms de RNF-2.
+
+La escritura a disco queda fuera del camino crítico: se difiere 500 ms y se agrupa por clave, así un
+arrastre de 60 eventos termina en una sola escritura. Protege la SD y no agrega latencia. Ver
+[[ADR-004-SQLite]].
 
 ## Secuencia — auto-calibración con cámara (CU-03)
 

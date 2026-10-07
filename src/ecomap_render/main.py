@@ -45,6 +45,10 @@ class RenderApp:
         self.running = True
         self.blackout = False
         self.effect_id: str | None = None
+        # Instante en que llego una op que cambia lo que se ve, para medir
+        # cuanto tarda en aparecer en pantalla (RNF-2).
+        self._op_recibida: float | None = None
+        self.apply_ms = 0.0
         self.scene_id: int | None = None
 
         self.bus = BusServer(settings.bus_address())
@@ -130,7 +134,10 @@ class RenderApp:
         next_frame = started
 
         while self.running and not self.presenter.should_close():
-            for message in self.bus.poll():
+            mensajes = self.bus.poll()
+            if mensajes:
+                self._op_recibida = time.perf_counter()
+            for message in mensajes:
                 self.apply(message)
 
             now = time.perf_counter()
@@ -141,6 +148,12 @@ class RenderApp:
             else:
                 self.presenter.ctx.clear(0.0, 0.0, 0.0)
             self.presenter.end_frame()
+
+            if self._op_recibida is not None:
+                # De op recibida a frame presentado. Es el tramo que el render
+                # controla; el resto de la latencia es navegador, HTTP y bus.
+                self.apply_ms = (time.perf_counter() - self._op_recibida) * 1000.0
+                self._op_recibida = None
 
             self._maybe_preview(now)
             self._maybe_telemetry(now, tele_period)
@@ -290,6 +303,7 @@ class RenderApp:
                 temp=self._temp,
                 dropped=self.bus.dropped_events,
                 scene_id=self.scene_id,
+                apply_ms=round(self.apply_ms, 2),
                 mode=self.settings.render_mode,
             )
         )
