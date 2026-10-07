@@ -48,8 +48,12 @@ POST   /api/system/blackout          {on: true}
 POST   /api/system/testpattern       {pattern: "grid"|"white"|"off"}
 POST   /api/calibration/auto         {method: "graycode"}   -> 202 + task_id
 GET    /api/calibration/auto/{task_id}
-GET    /api/camera/stream            # MJPEG 5 fps
-GET    /api/camera/snapshot          # JPEG
+
+GET    /api/camera/devices           [{uri, name, label, kind, node, stable_path}]
+GET    /api/camera/status            {state, source, width, height, fps, backend, message}
+POST   /api/camera/select            {source: "v4l2:///dev/v4l/by-id/..."}
+GET    /api/camera/stream            # MJPEG 5 fps (Hito 4)
+GET    /api/camera/snapshot          # JPEG (Hito 4)
 POST   /api/config/export            # descarga JSON completo
 POST   /api/config/import
 ```
@@ -87,6 +91,7 @@ Servidor → cliente, 2 Hz:
 {"op":"points",  "surface": 3, "points": [[0.1,0.1], ...]}
 {"op":"blackout","on": true}
 {"op":"pattern", "name": "grid"}
+{"op":"camera",  "source": "v4l2:///dev/v4l/by-id/usb-XXXX-video-index0"}
 {"op":"ping"}
 ```
 Render → web:
@@ -94,7 +99,23 @@ Render → web:
 {"ev":"tele","fps":59.4,"frame_ms":16.8,"temp":54.1}
 {"ev":"error","source":"shader","effect":"plasma","msg":"..."}
 {"ev":"calib","progress":0.45,"stage":"graycode_v"}
+{"ev":"camera","state":"open","source":"fake://","width":640,"height":480,"fps":15.0,"backend":"fake"}
 ```
+
+### Estados de cámara
+
+`state` tiene cuatro valores y el orden importa:
+
+| Estado | Significado |
+|---|---|
+| `closed` | sin cámara seleccionada, o guardada mientras el render está caído |
+| `opening` | el web mandó la orden y espera el evento del render |
+| `open` | abierta de verdad, con resolución y fps reales |
+| `error` | no se pudo abrir; `message` dice por qué |
+
+`opening` existe por una razón concreta: el render responde unos milisegundos
+después, así que si `POST /select` devolviera el estado guardado, la UI mostraría
+el error de la cámara que se acaba de descartar.
 
 Sin versionado de protocolo en v1: ambos procesos se despliegan juntos. Ver [[ADR-006-IPC-Web-Render]].
 

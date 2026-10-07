@@ -38,6 +38,29 @@ Se publican como uniforms al render. **No** se hace detección de personas ni ML
 
 Riesgo real: **lazo de realimentación positiva** — la cámara ve la proyección, eso genera movimiento, el efecto crece, la cámara ve más. Mitigaciones: restar el frame proyectado conocido (usando `H`), banda muerta en el umbral, y suavizado temporal (EMA) de `u_motion`.
 
+## Selección de cámara
+
+Puede haber más de una cámara conectada (webcam USB, cámara integrada del
+equipo, y la simulada de desarrollo), así que el dashboard tiene un **selector**.
+El reparto de responsabilidades es el mismo que en el resto del sistema:
+
+- **El web enumera.** Lee `/sys/class/video4linux/video*/{name,index}`, sin abrir
+  ningún device ni depender de OpenCV. Se queda con los nodos de `index` 0:
+  una webcam expone varios (`video0` captura, `video1` metadatos) y solo el
+  primero sirve. Es una heurística, no una consulta de capacidades V4L2 — y
+  alcanza, porque el error real lo reporta quien abre.
+- **El render abre.** Es el proceso que tiene el device montado y el contexto GL
+  donde va a vivir la textura. Reporta por el bus el estado real: resolución,
+  fps y backend efectivos, o el mensaje de error.
+- **La URI se guarda, no el índice.** Se prefiere `/dev/v4l/by-id/...`, que no
+  cambia entre arranques (ADR-010). Queda persistida en `setting.camera` y se
+  reenvía al render en cada reconexión.
+
+Una cámara que no se puede abrir **no corta la proyección**: el render queda sin
+cámara, avisa, y los efectos que piden `u_cam` reciben textura negra.
+
+Estados y contrato en [[Contratos-API]].
+
 ## Implementación
 
 - **Cámara web USB** vía `cv2.VideoCapture` con `CAP_V4L2` y fourcc MJPG. Única fuente soportada en v1, por presupuesto. Interfaz `CameraSource` para poder sumar CSI en v2. Ver [[ADR-010-Camara-USB]].

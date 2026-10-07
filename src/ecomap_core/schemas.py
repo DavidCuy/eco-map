@@ -45,3 +45,39 @@ class BlackoutRequest(BaseModel):
 
 class PatternRequest(BaseModel):
     pattern: TestPattern = Field(description="grid, white u off")
+
+
+# "opening" es transitorio: el web ya mando la orden y espera el evento del
+# render, que es quien sabe si la camara abrio de verdad.
+CameraState = Literal["closed", "opening", "open", "error"]
+
+
+class CameraDeviceOut(BaseModel):
+    """Una camara detectada, tal como la ofrece el selector."""
+
+    uri: str
+    name: str
+    label: str
+    kind: str
+    node: str | None = None
+    stable_path: str | None = None
+
+
+class CameraStatus(BaseModel):
+    """Lo que el render reporta sobre la camara que tiene abierta."""
+
+    state: CameraState = "closed"
+    source: str | None = None
+    width: int | None = None
+    height: int | None = None
+    fps: float | None = None
+    backend: str | None = None
+    message: str | None = None
+
+
+class CameraSelectRequest(BaseModel):
+    source: str = Field(
+        description="URI de la camara: fake:// o v4l2:///dev/v4l/by-id/...",
+        min_length=1,
+        max_length=512,
+    )

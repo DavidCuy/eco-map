@@ -13,10 +13,12 @@ from types import FrameType
 from typing import Any
 
 from ecomap_core.protocol import (
+    EV_CAMERA,
     EV_ERROR,
     EV_PONG,
     EV_TELE,
     OP_BLACKOUT,
+    OP_CAMERA,
     OP_PATTERN,
     OP_PING,
     ev,
@@ -28,6 +30,7 @@ from ecomap_render.context import HeadlessPresenter, Presenter, create_presenter
 from ecomap_render.pipeline import Pipeline, ShaderError
 from ecomap_render.preview import FrameStore, PreviewServer, encode_jpeg
 from ecomap_render.telemetry import FrameTimer, read_temp
+from ecomap_vision.source import CameraError, CameraSource, open_source
 
 log = logging.getLogger(__name__)
 
@@ -53,6 +56,8 @@ class RenderApp:
         self._preview_at = 0.0
         self._tele_at = 0.0
         self._preview_warned = False
+        self.camera: CameraSource | None = None
+        self.camera_source: str | None = None
 
     # --- arranque y parada ---
 
@@ -72,6 +77,7 @@ class RenderApp:
             self.preview.start()
 
     def teardown(self) -> None:
+        self._close_camera()
         if self.preview:
             self.preview.stop()
         if self.pipeline:
@@ -96,6 +102,8 @@ class RenderApp:
             name = str(message.get("name", "off"))
             self.pattern = shaders.PATTERN_BY_NAME.get(name, shaders.PATTERN_HELLO)
             log.info("patron: %s", name)
+        elif operation == OP_CAMERA:
+            self._select_camera(str(message.get("source", "")))
         else:
             log.debug("operacion ignorada en el Hito 0: %s", operation)
 
@@ -149,6 +157,56 @@ class RenderApp:
                 # No se llego al presupuesto: se resincroniza para no acumular
                 # deuda y entrar en espiral.
                 next_frame = time.perf_counter()
+
+    # --- camara ---
+
+    def _close_camera(self) -> None:
+        if self.camera is None:
+            return
+        try:
+            self.camera.close()
+        except Exception:  # noqa: BLE001 - cerrar no debe tumbar el render
+            log.warning("camara: fallo al cerrar", exc_info=True)
+        self.camera = None
+
+    def _select_camera(self, source: str) -> None:
+        """Abre la camara pedida y reporta el resultado real por el bus.
+
+        Una camara que no se puede abrir **no** es motivo para cortar la
+        proyeccion: se deja sin camara, se avisa, y los efectos que piden
+        `u_cam` reciben textura negra.
+        """
+        self._close_camera()
+        self.camera_source = source or None
+        if not source:
+            self.bus.publish(ev(EV_CAMERA, state="closed", source=None))
+            return
+        try:
+            self.camera = open_source(source)
+        except CameraError as exc:
+            log.warning("camara: %s", exc)
+            self.bus.publish(ev(EV_CAMERA, state="error", source=source, message=str(exc)))
+            return
+        info = self.camera.info
+        log.info(
+            "camara abierta: %s %sx%s @ %.0f fps (%s)",
+            info.uri,
+            info.width,
+            info.height,
+            info.fps,
+            info.backend,
+        )
+        self.bus.publish(
+            ev(
+                EV_CAMERA,
+                state="open",
+                source=source,
+                width=info.width,
+                height=info.height,
+                fps=info.fps,
+                backend=info.backend,
+            )
+        )
 
     def _maybe_preview(self, now: float) -> None:
         if self.preview is None or not isinstance(self.presenter, HeadlessPresenter):

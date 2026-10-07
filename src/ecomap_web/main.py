@@ -16,12 +16,12 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from ecomap_core.protocol import OP_PING, op
+from ecomap_core.protocol import OP_CAMERA, OP_PING, op
 from ecomap_core.settings import Settings, load_settings
 from ecomap_web import migrate
 from ecomap_web.bus import BusClient
 from ecomap_web.db import connect, get_setting
-from ecomap_web.routers import pages, system, ws
+from ecomap_web.routers import camera, pages, system, ws
 from ecomap_web.state import AppState
 
 log = logging.getLogger(__name__)
@@ -50,6 +50,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         state = AppState()
         state.blackout = get_setting(conn, "blackout", "0") == "1"
         state.pattern = get_setting(conn, "test_pattern", "off")  # type: ignore[assignment]
+        state.camera_source = get_setting(conn, "camera", settings.camera)
 
         bus = BusClient(settings.bus_address())
         bus.subscribe(state.handle_event)
@@ -61,6 +62,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await bus.send(op(OP_PING))
             await bus.send(op("blackout", on=state.blackout))
             await bus.send(op("pattern", name=state.pattern))
+            if state.camera_source:
+                await bus.send(op(OP_CAMERA, source=state.camera_source))
 
         bus.on_connect = on_connect
         await bus.start()
@@ -89,6 +92,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(pages.router)
     app.include_router(system.router)
+    app.include_router(camera.router)
     app.include_router(ws.router)
     return app
 

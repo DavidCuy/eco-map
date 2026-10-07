@@ -1,0 +1,55 @@
+{# Selector de cámara. Fragmento: se intercambia completo tras cada cambio.
+   El web enumera (sysfs), el render abre. El estado de abajo es lo que el
+   render reporta de verdad, no lo que la UI cree. #}
+<form hx-post="/api/camera/select"
+      hx-ext="json-enc"
+      hx-target="#camera"
+      hx-swap="innerHTML">
+  <label for="camera-source">
+    Cámara
+    <select id="camera-source" name="source">
+      {% for device in devices %}
+      <option value="{{ device.uri }}" {{ 'selected' if device.uri == selected else '' }}>
+        {{ device.label }}
+      </option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <div class="grid">
+    <button type="submit">Usar esta cámara</button>
+    <button type="button" class="secondary outline"
+            hx-get="/api/camera/devices"
+            hx-target="#camera"
+            hx-swap="innerHTML">
+      Volver a buscar
+    </button>
+  </div>
+</form>
+
+{% set estados = {
+    'open': ('dot-up', 'abierta'),
+    'opening': ('', 'abriendo...'),
+    'error': ('dot-down', 'error'),
+    'closed': ('', 'cerrada'),
+} %}
+{% set clase, texto = estados.get(camera.state, ('', camera.state)) %}
+<p>
+  <span class="dot {{ clase }}"></span>
+  <strong>{{ texto }}</strong>
+  {% if camera.state == 'open' %}
+  <small class="muted">
+    {{ camera.width }}×{{ camera.height }} @ {{ '%.0f'|format(camera.fps or 0) }} fps
+    · backend <code>{{ camera.backend }}</code>
+  </small>
+  {% elif camera.message %}
+  <small class="muted">{{ camera.message }}</small>
+  {% endif %}
+</p>
+
+{% if devices | selectattr('kind', 'equalto', 'v4l2') | list | length == 0 %}
+<small class="muted">
+  No se detectaron cámaras V4L2. En este equipo es lo esperado: Windows no hace
+  passthrough de USB al contenedor, así que solo está la cámara simulada.
+</small>
+{% endif %}

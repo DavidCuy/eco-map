@@ -29,6 +29,8 @@ def dashboard(
     state: StateDep,
     settings: SettingsDep,
 ) -> Response:
+    from ecomap_web.routers.camera import devices_out
+
     status = build_status(bus, state, request.app.state.version)
     return templates.TemplateResponse(
         request,
@@ -37,6 +39,9 @@ def dashboard(
             "status": status,
             "logs": list(reversed(state.logs[-10:])),
             "settings": settings,
+            "devices": devices_out(),
+            "selected": state.camera_source or settings.camera,
+            "camera": state.camera,
         },
     )
 

@@ -13,8 +13,8 @@ import logging
 import time
 from typing import Any
 
-from ecomap_core.protocol import EV_ERROR, EV_TELE
-from ecomap_core.schemas import Telemetry, TestPattern
+from ecomap_core.protocol import EV_CAMERA, EV_ERROR, EV_TELE
+from ecomap_core.schemas import CameraStatus, Telemetry, TestPattern
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +27,8 @@ class AppState:
         self.last_telemetry_at: float | None = None
         self.blackout = False
         self.pattern: TestPattern = "off"
+        self.camera = CameraStatus()
+        self.camera_source: str | None = None
         self.logs: list[dict[str, Any]] = []
         self._clients: set[Any] = set()
 
@@ -42,6 +44,15 @@ class AppState:
                 log.warning("telemetria invalida: %s", payload)
                 return
             self.last_telemetry_at = time.monotonic()
+        elif kind == EV_CAMERA:
+            payload = {k: v for k, v in message.items() if k != "ev"}
+            try:
+                self.camera = CameraStatus.model_validate(payload)
+            except Exception:  # noqa: BLE001 - estado malformado no debe romper el web
+                log.warning("estado de camara invalido: %s", payload)
+                return
+            if self.camera.source:
+                self.camera_source = self.camera.source
         elif kind == EV_ERROR:
             self.push_log(
                 level=str(message.get("level", "error")),
