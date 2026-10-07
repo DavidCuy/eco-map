@@ -21,6 +21,12 @@ class Telemetry(BaseModel):
     # De operacion recibida a frame presentado: el tramo de la latencia que el
     # render controla (RNF-2).
     apply_ms: float = 0.0
+    # Camara: lo que mide el hilo de vision. En dos nucleos es el riesgo
+    # principal, asi que se publica.
+    camera_fps: float = 0.0
+    camera_read_ms: float = 0.0
+    camera_motion_ms: float = 0.0
+    motion: float = 0.0
     temp: float | None = None
     dropped: int = 0
     scene_id: int | None = None
@@ -36,6 +42,10 @@ class SystemStatus(BaseModel):
     frame_ms: float
     frame_ms_max: float
     apply_ms: float
+    camera_fps: float
+    camera_read_ms: float
+    camera_motion_ms: float
+    motion: float
     temp: float | None
     dropped: int
     scene_id: int | None
@@ -43,6 +53,10 @@ class SystemStatus(BaseModel):
     version: str
     effect: str | None = None
     effect_error: str | None = None
+    # Lo reporta el render, no el web: la UI necesita saber en vivo si hay
+    # camara para habilitar la auto-calibracion, y el panel de camara se
+    # recarga por htmx aparte.
+    camera_state: str = "closed"
 
 
 class BlackoutRequest(BaseModel):
@@ -68,6 +82,7 @@ class EffectOut(BaseModel):
     version: str
     tags: list[str] = []
     needs_camera: bool = False
+    needs_feedback: bool = False
     cost: str = "low"
     params: list[EffectParamOut] = []
     available: bool = True
@@ -123,6 +138,45 @@ class CameraStatus(BaseModel):
     fps: float | None = None
     backend: str | None = None
     message: str | None = None
+
+
+class MotionSettings(BaseModel):
+    """Ajustes de la deteccion de movimiento.
+
+    Son las perillas contra la realimentacion optica: subir la banda muerta
+    ignora el titileo de la proyeccion, bajar el suavizado hace que responda
+    mas rapido pero realimente mas facil.
+    """
+
+    dead_band: float = Field(default=0.02, ge=0.0, le=0.5)
+    smoothing: float = Field(default=0.25, gt=0.0, le=1.0)
+    threshold: int = Field(default=25, ge=1, le=120)
+
+
+class CalibrationStart(BaseModel):
+    # Frames de camara a descartar tras cambiar el patron. El valor justo
+    # depende del hardware: buffer del driver, latencia USB y refresco del
+    # proyector. Por eso es un parametro y no una constante.
+    settle: int = Field(default=2, ge=0, le=10)
+    # Mas bits es mas resolucion y mas patrones que proyectar. 8 bits son 256
+    # columnas distinguibles, de sobra para una homografia.
+    max_bits: int = Field(default=8, ge=4, le=11)
+
+
+class CalibrationOut(BaseModel):
+    running: bool = False
+    progress: float = 0.0
+    stage: str = ""
+    ok: bool | None = None
+    message: str = ""
+    homography: list[list[float]] | None = None
+    rms: float | None = None
+    inliers: int = 0
+    coverage: float = 0.0
+    camera_size: list[int] | None = None
+    proj_size: list[int] | None = None
+    method: str = "graycode"
+    created_at: str | None = None
 
 
 class CameraSelectRequest(BaseModel):

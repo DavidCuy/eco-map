@@ -15,6 +15,7 @@ from ecomap_vision.source import CameraError, FakeSource, open_source
 from ecomap_web.main import create_app
 
 MIGRATIONS = Path(__file__).resolve().parent.parent / "migrations"
+EFFECTS_DIR = Path(__file__).resolve().parent.parent / "effects"
 
 
 # --- enumeracion ---------------------------------------------------------
@@ -131,7 +132,7 @@ async def cliente(tmp_path: Path):
         db=tmp_path / "ecomap.db",
         migrations_dir=MIGRATIONS,
         bus=f"tcp://127.0.0.1:{_puerto_libre()}",  # render offline
-        effects_dir=tmp_path / "effects",
+        effects_dir=EFFECTS_DIR,
         media_dir=tmp_path / "media",
     )
     app = create_app(settings)
@@ -244,3 +245,101 @@ def test_el_evento_de_camara_se_construye_bien():
     assert mensaje["ev"] == "camera"
     assert mensaje["state"] == "open"
     assert mensaje["width"] == 640
+
+
+# --- ajustes de deteccion (#21) ------------------------------------------
+
+
+async def test_los_ajustes_de_deteccion_se_persisten_y_viajan(cliente):
+    """Son las perillas contra la realimentacion optica, asi que el render
+    tiene que recibirlas y sobrevivir a un reinicio."""
+    (
+        client,
+        app,
+    ) = cliente[0], cliente[1]
+    enviados: list[dict] = []
+
+    async def espia(message):
+        enviados.append(message)
+        return True
+
+    app.state.bus.send = espia
+
+    respuesta = await client.put(
+        "/api/camera/motion", json={"dead_band": 0.08, "smoothing": 0.4, "threshold": 40}
+    )
+
+    assert respuesta.status_code == 200
+    motion = [m for m in enviados if m.get("op") == "motion"][-1]
+    assert motion["dead_band"] == 0.08
+    assert motion["threshold"] == 40
+    guardado = (await client.get("/api/camera/motion")).json()
+    assert guardado["smoothing"] == 0.4
+
+
+async def test_los_ajustes_de_deteccion_se_validan(cliente):
+    client = cliente[0]
+    # Un suavizado de 0 congelaria el valor para siempre.
+    assert (
+        await client.put(
+            "/api/camera/motion", json={"dead_band": 0.0, "smoothing": 0.0, "threshold": 25}
+        )
+    ).status_code == 422
+    assert (
+        await client.put(
+            "/api/camera/motion", json={"dead_band": 2.0, "smoothing": 0.5, "threshold": 25}
+        )
+    ).status_code == 422
+
+
+# --- camera_echo (#22) ---------------------------------------------------
+
+
+def test_camera_echo_declara_camara_y_realimentacion():
+    """Sin `needs_feedback` el render no le arma el buffer y el efecto no
+    tendria memoria: cada frame arrancaria de cero."""
+    from ecomap_core.effects import load_effect
+
+    efecto = load_effect(EFFECTS_DIR / "camera_echo")
+
+    assert efecto.manifest.needs_camera is True
+    assert efecto.manifest.needs_feedback is True
+
+
+def test_camera_echo_tiene_los_tres_frenos_contra_la_realimentacion():
+    """La camara ve la proyeccion: sin frenos el efecto se satura solo.
+
+    Los tres: decay < 1 (el pasado se apaga), gain (cuanto aporta la camara) y
+    la saturacion final.
+    """
+    from ecomap_core.effects import load_effect
+
+    efecto = load_effect(EFFECTS_DIR / "camera_echo")
+    claves = {p.key: p for p in efecto.manifest.params}
+
+    assert claves["decay"].max < 1.0, "con decay 1.0 el pasado nunca se apaga"
+    assert "gain" in claves
+    assert "min(" in efecto.fragment, "falta la saturacion final"
+
+
+async def test_la_escena_le_dice_al_render_que_capa_necesita_realimentacion(cliente):
+    """El render arma una textura extra por capa que la pida, asi que tiene que
+    venir en la escena."""
+    client, app = cliente[0], cliente[1]
+    enviados: list[dict] = []
+
+    async def espia(message):
+        enviados.append(message)
+        return True
+
+    app.state.bus.send = espia
+    surface_id = (await client.post("/api/surfaces", json={"name": "cara"})).json()["id"]
+    scene_id = (await client.post("/api/scenes", json={"name": "demo"})).json()["id"]
+
+    await client.post(
+        f"/api/scenes/{scene_id}/layers",
+        json={"surface_id": surface_id, "effect_id": "camera_echo"},
+    )
+
+    capa = [m for m in enviados if m.get("op") == "scene"][-1]["scene"]["layers"][0]
+    assert capa["needs_feedback"] is True

@@ -21,6 +21,7 @@ Sistema que proyecta efectos visuales deformados (warping) sobre una superficie 
 - Decisiones reemplazadas → [[ADR-007-Docker]] → [[ADR-009-Todo-en-Contenedores]] · [[ADR-008-Camara-Picamera2]] → [[ADR-010-Camara-USB]]
 - Hardware → [[Mini-PC-Setup]] · [[Raspberry-Pi-Setup]] · [[Proyector]] · [[Camara]]
 - Operación → [[Docker-Local]] · [[Despliegue-Raspberry]] · [[Estructura-Repositorio]] · [[Seguridad-y-Red]]
+- Verificación → [[Banco-Virtual-Proyector-Camara]] · [[Limitaciones-por-Hardware]]
 - Referencias → [[Referencias-Externas]]
 
 ## Stack en una línea

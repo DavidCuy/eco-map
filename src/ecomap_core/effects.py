@@ -68,6 +68,9 @@ class EffectManifest(BaseModel):
     version: str = "1.0.0"
     tags: list[str] = Field(default_factory=list)
     needs_camera: bool = False
+    # Un efecto con realimentacion lee su propio frame anterior en `u_prev`.
+    # Cuesta una textura extra por capa, asi que se pide explicitamente.
+    needs_feedback: bool = False
     cost: Literal["low", "medium", "high"] = "low"
     params: list[EffectParam] = Field(default_factory=list)
 
@@ -165,6 +168,9 @@ uniform float u_beat;
 uniform float u_motion;
 uniform vec2  u_motion_pos;
 uniform sampler2D u_cam;
+// Frame anterior de esta misma capa. Solo tiene contenido util si el
+// manifiesto declara `needs_feedback`; si no, es negro.
+uniform sampler2D u_prev;
 """
 
 _MAIN = """

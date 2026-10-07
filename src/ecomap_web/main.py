@@ -17,12 +17,21 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from ecomap_core.protocol import OP_CAMERA, OP_EFFECT, OP_PING, op
+from ecomap_core.protocol import OP_CAMERA, OP_EFFECT, OP_MOTION, OP_PING, op
 from ecomap_core.settings import Settings, load_settings
 from ecomap_web import migrate
 from ecomap_web.bus import BusClient
 from ecomap_web.db import connect, get_setting
-from ecomap_web.routers import camera, effects, pages, scenes, surfaces, system, ws
+from ecomap_web.routers import (
+    calibration,
+    camera,
+    effects,
+    pages,
+    scenes,
+    surfaces,
+    system,
+    ws,
+)
 from ecomap_web.services import effects as effect_service
 from ecomap_web.services import scenes as scene_service
 from ecomap_web.services.persist import DebouncedWriter
@@ -67,6 +76,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         bus = BusClient(settings.bus_address())
         bus.subscribe(state.handle_event)
 
+        def guardar_calibracion(resultado: dict) -> None:
+            """Una calibracion buena se guarda sola: repetirla cuesta tiempo y
+            paciencia, y nadie quiere rehacerla porque se reinicio el web."""
+            camera_size = resultado.get("camera_size") or [None, None]
+            proj_size = resultado.get("proj_size") or [None, None]
+            conn.execute(
+                "INSERT INTO calibration "
+                "(method, homography, rms_error, camera_w, camera_h, proj_w, proj_h) "
+                "VALUES ('graycode', ?, ?, ?, ?, ?, ?)",
+                (
+                    json.dumps(resultado.get("homography")),
+                    resultado.get("rms"),
+                    camera_size[0],
+                    camera_size[1],
+                    proj_size[0],
+                    proj_size[1],
+                ),
+            )
+            log.info("calibracion guardada: rms %.2f px", resultado.get("rms") or -1)
+
+        state.on_calibration = guardar_calibracion
+
         async def on_connect() -> None:
             # Al (re)conectar se reenvia el estado que el render no conoce.
             # En el Hito 0 alcanza con ping + blackout + patron; la escena
@@ -77,6 +108,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 await bus.send(op(OP_EFFECT, id=state.effect, params=state.effect_params))
             if state.camera_source:
                 await bus.send(op(OP_CAMERA, source=state.camera_source))
+            await bus.send(
+                op(
+                    OP_MOTION,
+                    dead_band=float(get_setting(conn, "motion_dead_band", "0.02") or 0.02),
+                    smoothing=float(get_setting(conn, "motion_smoothing", "0.25") or 0.25),
+                    threshold=int(get_setting(conn, "motion_threshold", "25") or 25),
+                )
+            )
             # La escena completa: el render no abre la base, asi que todo lo que
             # necesita para dibujar se lo manda el web al (re)conectar.
             await scene_service.push(bus, conn)
@@ -91,6 +130,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.version = _version()
         # Las escrituras de parametros se agrupan: ver services/persist.py.
         app.state.writer = DebouncedWriter()
+        # El preview de camara lo sirve el render, en su propio puerto. Se
+        # guarda el puerto y la URL se arma con el host del pedido, que es lo
+        # unico que sabe por donde entro el navegador.
+        app.state.preview_port = settings.preview_port
         log.info("web listo en http://%s:%s", settings.host, settings.port)
         try:
             yield
@@ -117,6 +160,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(surfaces.router)
     app.include_router(effects.router)
     app.include_router(scenes.router)
+    app.include_router(calibration.router)
     app.include_router(ws.router)
     return app
 

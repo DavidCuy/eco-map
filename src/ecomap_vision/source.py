@@ -8,6 +8,8 @@ respuesta honesta.
 
 URIs aceptadas:
     fake://                     patron sintetico
+    loopback://                 banco virtual: lo que el proyector dibuja,
+                                deformado (solo dentro del render)
     fake:///ruta/video.mp4      archivo reproducido en loop (requiere OpenCV)
     v4l2:///dev/video0          webcam
     v4l2:///dev/v4l/by-id/...   webcam por ruta estable (preferida)
@@ -168,6 +170,10 @@ def open_source(uri: str, **kwargs: Any) -> CameraSource:
 
     if esquema == "fake":
         return FakeSource(ruta or None)
+    if esquema == "loopback":
+        from ecomap_vision.loopback import from_uri
+
+        return from_uri(uri)
     if esquema == "v4l2":
         if not ruta:
             raise CameraError(f"uri de camara sin device: {uri!r}")

@@ -13,7 +13,7 @@ import logging
 import time
 from typing import Any
 
-from ecomap_core.protocol import EV_CAMERA, EV_EFFECTS, EV_ERROR, EV_TELE
+from ecomap_core.protocol import EV_CALIB, EV_CAMERA, EV_EFFECTS, EV_ERROR, EV_TELE
 from ecomap_core.schemas import CameraStatus, Telemetry
 
 log = logging.getLogger(__name__)
@@ -33,6 +33,10 @@ class AppState:
         # web no puede saber solo: el manifiesto puede estar perfecto y el
         # shader fallar en el driver de turno.
         self.effect_errors: dict[str, str] = {}
+        self.calibration: dict[str, Any] = {"running": False, "progress": 0.0, "stage": ""}
+        # Lo pone el web cuando llega un resultado valido, para que el router
+        # lo guarde en la base sin tener que hablar con el bus.
+        self.on_calibration: Any | None = None
         self.camera = CameraStatus()
         self.camera_source: str | None = None
         self.logs: list[dict[str, Any]] = []
@@ -59,6 +63,8 @@ class AppState:
                 return
             if self.camera.source:
                 self.camera_source = self.camera.source
+        elif kind == EV_CALIB:
+            self._calibracion(message)
         elif kind == EV_EFFECTS:
             errores = message.get("errors") or {}
             self.effect_errors = {str(k): str(v) for k, v in errores.items()}
@@ -73,6 +79,30 @@ class AppState:
                 message=str(message.get("msg", "")),
             )
         self.broadcast_soon(message)
+
+    def _calibracion(self, message: dict[str, Any]) -> None:
+        if message.get("done"):
+            self.calibration = {
+                "running": False,
+                "progress": 1.0,
+                "stage": "terminada",
+                "ok": bool(message.get("ok")),
+                "message": str(message.get("msg", "")),
+                "homography": message.get("homography"),
+                "rms": message.get("rms"),
+                "inliers": int(message.get("inliers") or 0),
+                "coverage": float(message.get("coverage") or 0.0),
+                "camera_size": message.get("camera_size"),
+                "proj_size": message.get("proj_size"),
+            }
+            if self.on_calibration and message.get("ok"):
+                self.on_calibration(self.calibration)
+            return
+        self.calibration = {
+            "running": True,
+            "progress": float(message.get("progress") or 0.0),
+            "stage": str(message.get("stage", "")),
+        }
 
     def push_log(self, level: str, source: str, message: str) -> None:
         self.logs.append({"level": level, "source": source, "msg": message, "ts": time.time()})

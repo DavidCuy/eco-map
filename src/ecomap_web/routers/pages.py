@@ -42,6 +42,7 @@ def dashboard(
     settings: SettingsDep,
     db: DbDep,
 ) -> Response:
+    from ecomap_web.routers import camera as camera_router
     from ecomap_web.routers.camera import devices_out
     from ecomap_web.routers.effects import catalogo, valores_efectivos
     from ecomap_web.services import effects as effect_service
@@ -53,8 +54,18 @@ def dashboard(
     # como <img>, no lo dibuja, para no ensuciar el canvas por CORS.
     host = request.url.hostname or "localhost"
     preview_url = f"{request.url.scheme}://{host}:{settings.preview_port}/"
+    from ecomap_web.routers.calibration import ultima as ultima_calibracion
+
+    calibracion = ultima_calibracion(db)
     workspace_config = {
         "surfaces": surface_service.listar(db),
+        # Con homografia valida, el canvas puede mostrar la vista de la camara
+        # y transformar los puntos: dibujar sobre el objeto real es mas
+        # intuitivo que sobre la salida del proyector (US-25).
+        "homography": calibracion.get("homography") if calibracion else None,
+        "cameraSize": calibracion.get("camera_size") if calibracion else None,
+        "rmsWarn": request.app.state.settings.calibration_rms_warn,
+        "cameraStream": f"{preview_url}camera",
         "status": status.model_dump(),
         "previewUrl": preview_url,
         "output": {"width": settings.width, "height": settings.height},
@@ -69,6 +80,8 @@ def dashboard(
             "devices": devices_out(),
             "selected": state.camera_source or settings.camera,
             "camera": state.camera,
+            "motion": camera_router.obtener_motion(db),
+            "camera_stream": f"{preview_url}camera",
             "effects": catalogo(db, state),
             "scenes": scene_service.listar(db),
             "surfaces": surface_service.listar(db),

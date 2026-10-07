@@ -39,8 +39,13 @@
   {# Canvas: el preview del render de fondo, los handles encima. Se separa en
      dos capas para no tener que leer píxeles del stream, que ensuciaría el
      canvas por CORS. #}
-  <div class="stage" x-ref="stage">
-    <img class="preview" :src="previewUrl" alt="preview de la proyección">
+  {# En vista de cámara el escenario toma el aspecto de la cámara: con el 16:9
+     del proyector la imagen 4:3 sale achatada y ajustar un handle a ojo se
+     vuelve engañoso. El `object-fit: fill` mantiene el mapeo lineal, así que
+     la transformación no cambia. #}
+  <div class="stage" x-ref="stage"
+       :style="vista === 'camara' ? `aspect-ratio: ${camaraSize[0]} / ${camaraSize[1]}` : ''">
+    <img class="preview" :src="fondo" alt="preview">
     <canvas x-ref="canvas"
             @pointerdown="onPointerDown($event)"
             @pointermove="onPointerMove($event)"
@@ -64,6 +69,13 @@
     <button class="secondary" @click="toggleSurface()" :disabled="!active"
             x-text="active && active.enabled ? 'ocultar' : 'mostrar'"></button>
     <button class="secondary outline" @click="removeSurface()" :disabled="!active">borrar</button>
+    {# Vista de cámara: dibujar sobre el objeto real es más intuitivo que
+       sobre la salida del proyector. Necesita homografía, o sea haber
+       auto-calibrado antes. #}
+    <button class="secondary" @click="alternarVista()"
+            :disabled="!puedeVerCamara"
+            :title="puedeVerCamara ? 'alternar entre la salida y lo que ve la cámara' : 'hace falta auto-calibrar primero'"
+            x-text="vista === 'proyector' ? 'ver cámara' : 'ver proyector'"></button>
   </nav>
 
   {# Tira de caras: con una superficie por cara física, saltar entre ellas tiene
@@ -108,6 +120,44 @@
     <div id="camera">
       {% include "partials/camera.html" %}
     </div>
+  </details>
+
+  {# Auto-calibración: el render proyecta Gray code, la cámara lo ve, y de ahí
+     sale la homografía cámara -> proyector. Vive acá y no en el panel de
+     cámara porque el panel se recarga por htmx y perdería el progreso. #}
+  <details class="panel">
+    <summary>Auto-calibración</summary>
+
+    <p>
+      <button @click="autoCalibrar()"
+              :disabled="calib.running || status.camera_state !== 'open'"
+              x-text="calib.running ? 'calibrando…' : 'Calibrar con la cámara'"></button>
+      <button class="secondary outline" x-show="calib.running" @click="cancelarCalibracion()">
+        Cancelar
+      </button>
+      <small class="muted" x-show="status.camera_state !== 'open'">
+        Hace falta una cámara abierta: sin ella no hay nada que decodificar.
+      </small>
+    </p>
+
+    <p x-show="calib.running">
+      <progress :value="calib.progress" max="1"></progress>
+      <small class="muted">
+        <span x-text="calib.stage"></span>
+        · <span x-text="(calib.progress * 100).toFixed(0) + '%'"></span>
+      </small>
+    </p>
+
+    <p x-show="!calib.running">
+      <span class="dot" :class="homography ? 'dot-up' : ''"></span>
+      <small :class="calib.ok === false || calibDudosa ? 'error' : 'muted'" x-text="calibResumen"></small>
+    </p>
+
+    <small class="muted">
+      El error de reproyección en píxeles es la medida útil: por debajo de
+      <span x-text="rmsWarn"></span> px la homografía sirve para dibujar las caras sobre la
+      vista de la cámara. Por encima, mejor ajustarlas a mano en vista de proyector.
+    </small>
   </details>
 
   <details class="panel">

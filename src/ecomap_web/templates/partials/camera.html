@@ -1,6 +1,6 @@
-{# Selector de cámara. Fragmento: se intercambia completo tras cada cambio.
-   El web enumera (sysfs), el render abre. El estado de abajo es lo que el
-   render reporta de verdad, no lo que la UI cree. #}
+{# Selector de cámara, stream para apuntarla y ajustes de detección.
+   El web enumera, el render abre: el estado de abajo es lo que el render
+   reporta de verdad, no lo que la UI supone. #}
 <form hx-post="/api/camera/select"
       hx-ext="json-enc"
       hx-target="#camera"
@@ -19,9 +19,7 @@
   <div class="grid">
     <button type="submit">Usar esta cámara</button>
     <button type="button" class="secondary outline"
-            hx-get="/api/camera/devices"
-            hx-target="#camera"
-            hx-swap="innerHTML">
+            hx-get="/api/camera/devices" hx-target="#camera" hx-swap="innerHTML">
       Volver a buscar
     </button>
   </div>
@@ -46,6 +44,41 @@
   <small class="muted">{{ camera.message }}</small>
   {% endif %}
 </p>
+
+{% if camera.state == 'open' %}
+{# El stream es para **apuntar** la cámara, no para monitorear: va a 5 fps y
+   tamaño reducido (Modulo-Camara-Feedback). #}
+<img class="camera-stream" src="{{ camera_stream }}" alt="vista de la cámara" loading="lazy">
+
+<p class="motion-live" x-data>
+  movimiento
+  <progress :value="status.motion" max="1"></progress>
+  <small class="muted" x-text="(status.motion * 100).toFixed(0) + '%'"></small>
+  <small class="muted">
+    · captura <span x-text="status.camera_fps.toFixed(0)"></span> fps,
+    leer <span x-text="status.camera_read_ms.toFixed(1)"></span> ms,
+    detectar <span x-text="status.camera_motion_ms.toFixed(1)"></span> ms
+  </small>
+</p>
+
+<details>
+  <summary><small>Ajustes de detección</small></summary>
+  {# Las perillas contra la realimentación óptica: la cámara ve la proyección,
+     y sin estos frenos el efecto se alimenta a sí mismo. #}
+  <form hx-put="/api/camera/motion" hx-ext="json-enc" hx-target="#camera" hx-swap="innerHTML">
+    <label>Banda muerta <small class="muted">ignora lo que esté por debajo</small>
+      <input type="range" name="dead_band" min="0" max="0.2" step="0.005" value="{{ motion.dead_band }}">
+    </label>
+    <label>Suavizado <small class="muted">más bajo, más suave y menos realimentación</small>
+      <input type="range" name="smoothing" min="0.05" max="1" step="0.05" value="{{ motion.smoothing }}">
+    </label>
+    <label>Umbral de diferencia
+      <input type="range" name="threshold" min="5" max="90" step="1" value="{{ motion.threshold }}">
+    </label>
+    <button type="submit" class="secondary">Aplicar</button>
+  </form>
+</details>
+{% endif %}
 
 {% if devices | selectattr('kind', 'equalto', 'v4l2') | list | length == 0 %}
 <small class="muted">

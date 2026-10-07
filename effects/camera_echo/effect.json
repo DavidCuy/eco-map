@@ -1,0 +1,16 @@
+{
+  "id": "camera_echo",
+  "name": "Eco de camara",
+  "version": "1.0.0",
+  "tags": ["camara", "reactivo"],
+  "needs_camera": true,
+  "needs_feedback": true,
+  "cost": "medium",
+  "params": [
+    {"key": "decay", "label": "Persistencia", "type": "float", "min": 0.0, "max": 0.95, "default": 0.82},
+    {"key": "drift", "label": "Desplazamiento", "type": "float", "min": 0.0, "max": 0.02, "default": 0.004, "step": 0.0005},
+    {"key": "gain", "label": "Ganancia", "type": "float", "min": 0.0, "max": 1.0, "default": 0.45},
+    {"key": "tint", "label": "Tinte", "type": "color", "default": "#00e6c8"},
+    {"key": "zoom", "label": "Zoom del eco", "type": "float", "min": 0.9, "max": 1.1, "default": 1.004, "step": 0.001}
+  ]
+}

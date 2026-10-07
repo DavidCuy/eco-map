@@ -22,7 +22,23 @@ function workspace(config) {
     saving: false,
     error: null,
     previewUrl: config.previewUrl,
+    cameraStream: config.cameraStream,
     output: config.output, // {width, height}
+
+    // Homografía cámara -> proyector, de la auto-calibración. Con ella el
+    // canvas puede mostrar lo que ve la cámara y dejar marcar la superficie
+    // sobre el objeto real, que es más intuitivo que hacerlo sobre la salida
+    // del proyector (US-25).
+    homography: config.homography || null,
+    vista: 'proyector', // o 'camara'
+    // Tamaño en que se estimó la homografía: el hilo de visión procesa
+    // reducido, así que los píxeles de la H no son los del stream.
+    camaraSize: config.cameraSize || [320, 240],
+    calib: { running: false, progress: 0, stage: '', ok: null, message: '', rms: null, inliers: 0, coverage: 0 },
+    // Error de reproyección a partir del cual no hay que confiar en la
+    // homografía: una calibración mala es peor que ninguna, porque todo lo que
+    // se dibuje sobre la cámara cae corrido sin que se note hasta proyectar.
+    rmsWarn: config.rmsWarn || 2.0,
 
     // El arrastre manda muchas posiciones por segundo; se limita el ritmo hacia
     // el servidor y siempre se manda una última al soltar, para no perder el
@@ -31,6 +47,69 @@ function workspace(config) {
     zoomSize: 140, // igual que .zoom en app.css
     lastSent: 0,
     pendingSend: null,
+
+    get puedeVerCamara() {
+      return this.homography !== null;
+    },
+
+    get fondo() {
+      return this.vista === 'camara' ? this.cameraStream : this.previewUrl;
+    },
+
+    alternarVista() {
+      if (!this.puedeVerCamara) return;
+      this.vista = this.vista === 'proyector' ? 'camara' : 'proyector';
+      this.activeHandle = null;
+      this.draw();
+    },
+
+    // --- transformación entre vistas ---
+    //
+    // Los puntos se guardan SIEMPRE en coordenadas de proyector: es lo único
+    // que el render entiende. En vista de cámara se transforman solo para
+    // dibujarlos y para interpretar el arrastre, nunca para guardarlos.
+
+    aplicarH(H, p) {
+      const [x, y] = p;
+      const w = H[2][0] * x + H[2][1] * y + H[2][2];
+      if (Math.abs(w) < 1e-9) return p;
+      return [
+        (H[0][0] * x + H[0][1] * y + H[0][2]) / w,
+        (H[1][0] * x + H[1][1] * y + H[1][2]) / w,
+      ];
+    },
+
+    invertirH(H) {
+      // Inversa de 3x3 por cofactores: son nueve números, no justifica una
+      // biblioteca.
+      const [[a, b, c], [d, e, f], [g, h, i]] = H;
+      const det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+      if (Math.abs(det) < 1e-12) return null;
+      return [
+        [(e * i - f * h) / det, (c * h - b * i) / det, (b * f - c * e) / det],
+        [(f * g - d * i) / det, (a * i - c * g) / det, (c * d - a * f) / det],
+        [(d * h - e * g) / det, (b * g - a * h) / det, (a * e - b * d) / det],
+      ];
+    },
+
+    // proyector normalizado -> cámara normalizada, para dibujar
+    aVista(p) {
+      if (this.vista === 'proyector' || !this.homography) return p;
+      const inv = this.invertirH(this.homography);
+      if (!inv) return p;
+      const px = this.aplicarH(inv, [p[0] * this.output.width, p[1] * this.output.height]);
+      return [px[0] / this.camaraSize[0], px[1] / this.camaraSize[1]];
+    },
+
+    // cámara normalizada -> proyector normalizado, para guardar
+    deVista(p) {
+      if (this.vista === 'proyector' || !this.homography) return p;
+      const px = this.aplicarH(this.homography, [
+        p[0] * this.camaraSize[0],
+        p[1] * this.camaraSize[1],
+      ]);
+      return [px[0] / this.output.width, px[1] / this.output.height];
+    },
 
     get active() {
       return this.surfaces.find((s) => s.id === this.activeId) || null;
@@ -61,7 +140,70 @@ function workspace(config) {
       socket.onmessage = (event) => {
         const msg = JSON.parse(event.data);
         if (msg.type === 'status') this.status = msg;
+        if (msg.ev === 'calib') this.onCalib(msg);
       };
+    },
+
+    // --- auto-calibración ---
+    //
+    // La corre el render, que es quien tiene proyector y cámara. Acá solo se
+    // dispara y se sigue el progreso: la secuencia son decenas de patrones y
+    // tarda varios segundos, así que el POST devuelve 202 y el resultado llega
+    // por el WebSocket.
+
+    async autoCalibrar() {
+      if (!confirm('Durante la secuencia el proyector muestra patrones en blanco y negro, no el efecto. Tarda unos segundos. ¿Seguir?')) return;
+      this.calib = { running: true, progress: 0, stage: 'arrancando', ok: null, message: '' };
+      try {
+        await this.api('POST', '/api/calibration/auto', {});
+      } catch (e) {
+        this.calib.running = false;
+      }
+    },
+
+    onCalib(msg) {
+      if (!msg.done) {
+        this.calib = { ...this.calib, running: true, progress: msg.progress || 0, stage: msg.stage || '' };
+        return;
+      }
+      this.calib = {
+        running: false,
+        progress: 1,
+        stage: 'terminada',
+        ok: !!msg.ok,
+        message: msg.msg || '',
+        rms: msg.rms ?? null,
+        inliers: msg.inliers || 0,
+        coverage: msg.coverage || 0,
+      };
+      if (msg.ok && msg.homography) {
+        this.homography = msg.homography;
+        if (msg.camera_size) this.camaraSize = msg.camera_size;
+      } else if (this.vista === 'camara') {
+        // Si falló, la vista de cámara mostraría puntos en cualquier parte.
+        this.vista = 'proyector';
+      }
+      this.draw();
+    },
+
+    async cancelarCalibracion() {
+      try {
+        await this.api('DELETE', '/api/calibration/auto');
+      } catch (e) { /* el estado real llega por el WebSocket */ }
+    },
+
+    get calibDudosa() {
+      return this.calib.ok === true && this.calib.rms !== null && this.calib.rms > this.rmsWarn;
+    },
+
+    get calibResumen() {
+      const c = this.calib;
+      if (c.ok === null) return this.homography ? 'calibrada en una corrida anterior' : 'sin calibrar';
+      if (!c.ok) return c.message;
+      const base = `error ${c.rms.toFixed(2)} px · ${c.inliers} puntos · cubre ${(c.coverage * 100).toFixed(0)}% del cuadro`;
+      return this.calibDudosa
+        ? `${base} — por encima de ${this.rmsWarn} px: conviene ajustar las caras a mano`
+        : base;
     },
 
     // --- API ---
@@ -155,15 +297,18 @@ function workspace(config) {
 
     toCanvas(p) {
       const r = this.rect();
-      return [p[0] * r.width, p[1] * r.height];
+      const v = this.aVista(p);
+      return [v[0] * r.width, v[1] * r.height];
     },
 
     fromEvent(event) {
       const r = this.rect();
-      return [
+      const enVista = [
         Math.min(1.2, Math.max(-0.2, (event.clientX - r.left) / r.width)),
         Math.min(1.2, Math.max(-0.2, (event.clientY - r.top) / r.height)),
       ];
+      // Se guarda en coordenadas de proyector, siempre.
+      return this.deVista(enVista);
     },
 
     draw() {
