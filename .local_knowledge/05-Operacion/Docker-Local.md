@@ -11,12 +11,28 @@ compose estándar, así que sirven igual con Docker; lo que cambia son los coman
 trampas verificadas en [[ADR-012-Podman-Desarrollo-Local]].
 
 ```bash
-uv tool install podman-compose                 # una vez
-podman build -t ecomap:latest .
-podman-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
-podman logs -f eco-map_render_1                # ojo: guion bajo con podman-compose
-podman-compose -f docker-compose.yml -f docker-compose.dev.yml down
+uv tool install podman-compose          # una vez
+podman build --target dev -t ecomap:dev .
+podman-compose -f compose.dev.yml up -d
+podman logs -f eco-map_render_1         # ojo: guion bajo con podman-compose
+podman exec eco-map_web_1 pytest -q     # la imagen dev trae pytest y ruff
+podman-compose -f compose.dev.yml down
 ```
+
+## Un Dockerfile, tres compose
+
+Cada entorno tiene su **compose autocontenido**, sin overrides encadenados
+([[ADR-013-Plataforma-Agnostica]]):
+
+| Archivo | Destino | Particularidad |
+|---|---|---|
+| `compose.dev.yml` | laptop | target `dev`, llvmpipe, 640×360@30, bind mounts, cámara simulada |
+| `compose.minipc.yml` | mini PC x86 | `kms` con driver i915, host network, D-Bus, 1080p60 |
+| `compose.pi.yml` | Raspberry Pi | `kms` con driver v3d, `platform: linux/arm64` |
+
+Un solo `Dockerfile` con dos targets, `runtime` y `dev`. No hay uno por plataforma porque el
+contenido sería idéntico: `libgl1-mesa-dri` ya trae llvmpipe, crocus/iris y v3d. Se partirá cuando
+llegue la aceleración de video por hardware, donde la mini PC quiere VAAPI y la Pi `v4l2m2m`.
 
 ## Volúmenes
 
@@ -67,7 +83,7 @@ CMD ["ecomap-web"]
 - `network-manager` solo aporta el cliente `nmcli`; el daemon corre en el host. Ver [[Modulo-Red]].
 - `effects/`, `media/` y `data/` **no** se copian a la imagen: son volúmenes.
 
-## docker-compose.yml (base)
+## compose: estructura común
 
 ```yaml
 services:
@@ -111,7 +127,7 @@ volumes:
 
 El render monta efectos y media **`:ro`**: no tiene por qué escribirlos, y así un shader no puede corromper el catálogo.
 
-## docker-compose.dev.yml (escritorio, sin hardware)
+## compose.dev.yml (laptop, sin hardware)
 
 ```yaml
 services:
@@ -140,12 +156,12 @@ services:
 ```
 
 ```bash
-podman-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+podman-compose -f compose.dev.yml up -d
 ```
 
 Sin proyector, sin cámara, sin Pi: el render dibuja a un FBO y expone el resultado como MJPEG en `:8001`, que la UI muestra como preview. Es lo que permite desarrollar todo el flujo de calibración y efectos en el escritorio. Ver [[Modulo-Render]].
 
-## docker-compose.pi.yml (producción)
+## compose.minipc.yml y compose.pi.yml (producción)
 
 ```yaml
 services:

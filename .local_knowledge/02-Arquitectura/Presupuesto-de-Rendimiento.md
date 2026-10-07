@@ -4,7 +4,19 @@ tags: [arquitectura, rendimiento]
 
 # Presupuesto de rendimiento
 
-Objetivo: **16.6 ms por frame** (60 fps) en Pi 4; 33 ms (30 fps) aceptable con partículas.
+Objetivo: **16.6 ms por frame** (60 fps); 33 ms (30 fps) aceptable con partículas. Dos plataformas
+soportadas, con cuellos distintos. Ver [[ADR-013-Plataforma-Agnostica]].
+
+| | Mini PC (N3350) | Raspberry Pi 4 |
+|---|---|---|
+| CPU | 2 núcleos Goldmont 1.1–2.4 GHz | 4 núcleos Cortex-A72 1.5 GHz |
+| GPU | HD 500, 12 EUs @650 MHz | VideoCore VI |
+| Cuello esperado | **CPU** | **fillrate de GPU** |
+
+En la mini PC hay más margen de GPU pero la mitad de núcleos, así que el riesgo se mueve: el hilo
+de cámara ([[Modulo-Camara-Feedback]]), que decodifica MJPEG y redimensiona por CPU, pasa a competir
+con el loop de render y con el web. Ninguna de las dos columnas está medida todavía en `kms`:
+los números de abajo son presupuesto, no observación. Qué medir: [[Mini-PC-Setup]].
 
 ## Reparto en Pi 4 (1080p)
 

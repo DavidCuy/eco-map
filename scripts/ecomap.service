@@ -1,19 +1,24 @@
-# Unit minima: Docker hace el trabajo, systemd solo garantiza que el stack
-# suba tras un corte de luz aunque alguien lo haya bajado a mano.
+# Unit minima: podman hace el trabajo, systemd solo garantiza que el stack suba
+# tras un corte de luz aunque alguien lo haya bajado a mano.
+#
+# Ajustar el archivo compose segun la plataforma:
+#   compose.minipc.yml  -> mini PC x86 (referencia)
+#   compose.pi.yml      -> Raspberry Pi
+#
 # Instalar en /etc/systemd/system/ecomap.service y habilitar con:
 #   sudo systemctl enable --now ecomap
 
 [Unit]
 Description=Eco-Map stack
-Requires=docker.service
-After=docker.service network-online.target
+After=network-online.target
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=/opt/ecomap
-ExecStart=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d
-ExecStop=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.pi.yml down
+Environment=COMPOSE_FILE=compose.minipc.yml
+ExecStart=/usr/local/bin/podman-compose -f ${COMPOSE_FILE} up -d
+ExecStop=/usr/local/bin/podman-compose -f ${COMPOSE_FILE} down
 TimeoutStartSec=300
 
 [Install]

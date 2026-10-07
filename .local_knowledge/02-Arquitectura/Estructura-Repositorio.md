@@ -8,10 +8,10 @@ tags: [arquitectura, repo]
 eco-map/
 ├── pyproject.toml              # uv, un solo proyecto, extras por componente
 ├── uv.lock
-├── Dockerfile                  # multi-stage, multi-arch arm64 + amd64
-├── docker-compose.yml          # base: servicios y volúmenes
-├── docker-compose.dev.yml      # escritorio: bind mounts, render software, cámara fake
-├── docker-compose.pi.yml       # Pi: /dev/dri, webcam, host network, D-Bus
+├── Dockerfile                  # multi-stage, targets runtime y dev, amd64 + arm64
+├── compose.dev.yml             # laptop: bind mounts, llvmpipe, cámara simulada
+├── compose.minipc.yml          # mini PC x86: kms con i915, host network, D-Bus
+├── compose.pi.yml              # Raspberry Pi: kms con v3d, platform arm64
 ├── .env.example
 ├── src/
 │   ├── ecomap_core/            # compartido: schemas, protocolo IPC, config

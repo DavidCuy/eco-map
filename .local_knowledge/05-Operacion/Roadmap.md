@@ -8,7 +8,7 @@ Todos los hitos se desarrollan **sin hardware adicional**: contenedores en el es
 
 ## Hito 0 — Esqueleto (1 semana)
 Repo con `pyproject.toml`/uv, Dockerfile multi-arch, los tres compose, migraciones y SQLite. Los cuatro volúmenes. FastAPI sirviendo el dashboard con Jinja2+HTMX+Pico. Render abriendo contexto GL y dibujando un triángulo. Bus UDS con `ping`/`pong`.
-**Criterio:** `docker compose -f docker-compose.yml -f docker-compose.dev.yml up` levanta ambos y la UI muestra fps reales del render.
+**Criterio:** `podman-compose -f compose.dev.yml up -d` levanta ambos y la UI muestra fps reales del render.
 → [[Estructura-Repositorio]] · [[ADR-003-uv]] · [[ADR-009-Todo-en-Contenedores]]
 
 ## Hito 1 — Un quad calibrable (1–2 semanas)

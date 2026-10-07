@@ -1,0 +1,84 @@
+# Desarrollo en la laptop: sin proyector, sin camara, sin GPU dedicada.
+# Autocontenido, no es un override de nadie.
+#
+#   podman-compose -f compose.dev.yml up -d
+#   podman-compose -f compose.dev.yml down
+#   podman exec eco-map_web_1 pytest -q      # la imagen dev trae pytest
+#
+# Con Docker: docker compose -f compose.dev.yml up -d  (contenedores con guion)
+
+x-dev: &dev
+  build:
+    context: .
+    target: dev
+  image: ecomap:dev
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  render:
+    <<: *dev
+    command: ecomap-render
+    environment:
+      ECOMAP_BUS: /run/ecomap/bus.sock
+      ECOMAP_EFFECTS: /effects
+      ECOMAP_MEDIA: /media
+      ECOMAP_RENDER_MODE: headless
+      # EGL + llvmpipe: render por CPU, sin GPU del host.
+      ECOMAP_GL_BACKEND: egl
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      # 640x360 a 30 fps porque llvmpipe no llega a mas: a 960x540 el
+      # frame_ms medido fue 30.89 contra un presupuesto de 33 y el preview
+      # se veia a saltos, lo que confunde al depurar logica.
+      ECOMAP_WIDTH: "640"
+      ECOMAP_HEIGHT: "360"
+      ECOMAP_FPS: "30"
+      ECOMAP_PREVIEW_PORT: "8001"
+      ECOMAP_PREVIEW_FPS: "5"
+      # Sin passthrough de USB en Windows: camara simulada (Hito 4).
+      ECOMAP_CAMERA: "fake://"
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./src:/app/src
+      - ./effects:/effects:ro
+      - ./media:/media:ro
+      - ecomap-bus:/run/ecomap
+
+  web:
+    <<: *dev
+    command: ecomap-web
+    depends_on:
+      - render
+    environment:
+      ECOMAP_DB: /data/ecomap.db
+      ECOMAP_BUS: /run/ecomap/bus.sock
+      ECOMAP_EFFECTS: /effects
+      ECOMAP_MEDIA: /media
+      ECOMAP_RELOAD: "1"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+      - ./migrations:/app/migrations:ro
+      - ./effects:/effects
+      - ./media:/media
+      - ecomap-data:/data
+      - ecomap-bus:/run/ecomap
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  # effects y media van por bind mount en dev, para editar shaders con el
+  # editor local. data y bus si son volumenes: la DB no deberia vivir en el
+  # arbol del repo y los bind mounts de sockets Unix fallan en Windows y macOS.
+  ecomap-data:
+  ecomap-bus:

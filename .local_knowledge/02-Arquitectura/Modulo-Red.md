@@ -15,7 +15,7 @@ Es un caso con una trampa clásica: **para configurar la red hay que usar la red
 El host corre **NetworkManager** (default en Raspberry Pi OS Bookworm). El contenedor web lo controla por **D-Bus del sistema**:
 
 ```yaml
-# docker-compose.pi.yml (fragmento)
+# compose.minipc.yml / compose.pi.yml (fragmento)
 web:
   network_mode: host
   volumes:

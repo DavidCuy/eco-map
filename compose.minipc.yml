@@ -1,0 +1,86 @@
+# Mini PC x86 (plataforma de referencia). Salida HDMI directa, sin escritorio.
+#
+# Requisitos del host (ver .local_knowledge/04-Hardware/Mini-PC-Setup.md):
+#   - Debian/Ubuntu Server sin entorno grafico (nada que tome el DRM master)
+#   - driver i915 en el kernel (viene de serie)
+#   - el usuario del servicio en los grupos video y render
+#   - NetworkManager y avahi-daemon para el Hito 3
+#
+#   podman-compose -f compose.minipc.yml up -d
+#   podman-compose -f compose.minipc.yml logs -f render
+
+x-prod: &prod
+  build:
+    context: .
+    target: runtime
+  image: ecomap:latest
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  render:
+    <<: *prod
+    command: ecomap-render
+    environment:
+      ECOMAP_BUS: /run/ecomap/bus.sock
+      ECOMAP_EFFECTS: /effects
+      ECOMAP_MEDIA: /media
+      ECOMAP_RENDER_MODE: kms
+      ECOMAP_WIDTH: "1920"
+      ECOMAP_HEIGHT: "1080"
+      ECOMAP_FPS: "60"
+      ECOMAP_PREVIEW_PORT: "8001"
+      # Hito 4: v4l2:///dev/video0
+      ECOMAP_CAMERA: "fake://"
+    devices:
+      # GPU Intel: el contenedor toma el DRM master, asi que el host no puede
+      # tener escritorio corriendo.
+      - /dev/dri:/dev/dri
+      # Webcam por ruta estable: el indice /dev/videoN cambia entre arranques.
+      # Descomentar con el id real de `ls -l /dev/v4l/by-id/` (Hito 4).
+      # - /dev/v4l/by-id/usb-XXXX-video-index0:/dev/video0
+    group_add:
+      - video
+      - render
+    volumes:
+      - ecomap-effects:/effects:ro
+      - ecomap-media:/media:ro
+      - ecomap-bus:/run/ecomap
+
+  web:
+    <<: *prod
+    command: ecomap-web
+    depends_on:
+      - render
+    # host network para que mDNS (eco-map.local) y la configuracion de wifi
+    # funcionen (Hito 3). Publica 8000 directo en el host.
+    network_mode: host
+    environment:
+      ECOMAP_DB: /data/ecomap.db
+      ECOMAP_BUS: /run/ecomap/bus.sock
+      ECOMAP_EFFECTS: /effects
+      ECOMAP_MEDIA: /media
+    volumes:
+      - ecomap-data:/data
+      - ecomap-effects:/effects
+      - ecomap-media:/media
+      - ecomap-bus:/run/ecomap
+      # Control de NetworkManager. Es la mayor elevacion de privilegio del
+      # diseno y queda acotada a este servicio (ver Seguridad-y-Red).
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  ecomap-data:
+  ecomap-effects:
+  ecomap-media:
+  ecomap-bus:

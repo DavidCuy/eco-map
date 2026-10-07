@@ -30,9 +30,9 @@ El runtime de desarrollo es **Podman rootless** con `podman-compose`. Los archiv
 estándar, así que Docker también sirve; solo cambian los comandos.
 
 ```bash
-uv tool install podman-compose        # una vez
-podman build -t ecomap:latest .
-podman-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+uv tool install podman-compose          # una vez
+podman build --target dev -t ecomap:dev .
+podman-compose -f compose.dev.yml up -d
 ```
 
 - UI: <http://localhost:8000>
@@ -44,11 +44,12 @@ simples, **no** para medir rendimiento.
 
 ```bash
 podman logs -f eco-map_render_1      # con podman-compose los nombres usan guion bajo
-podman-compose -f docker-compose.yml -f docker-compose.dev.yml down
+podman exec eco-map_web_1 pytest -q  # la imagen dev trae pytest
+podman-compose -f compose.dev.yml down
 ```
 
-Con Docker el equivalente es `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d`
-y los contenedores se llaman `eco-map-render-1`.
+Con Docker el equivalente es `docker compose -f compose.dev.yml up -d`, y los contenedores se
+llaman `eco-map-render-1` con guion.
 
 ### Sin contenedores
 
@@ -63,15 +64,23 @@ uv run ecomap-web             # en otra
 En Linux y macOS el bus usa un socket Unix. En Windows CPython no expone `AF_UNIX`, así que hay
 que usar `ECOMAP_BUS=tcp://127.0.0.1:8765` en ambos procesos.
 
-### En la Raspberry Pi
+### En hardware
+
+El sistema es agnóstico de plataforma: corre en x86-64 y en arm64 con el mismo código. Cada destino
+tiene su compose autocontenido.
 
 ```bash
-podman-compose -f docker-compose.yml -f docker-compose.pi.yml up -d
+podman build --target runtime -t ecomap:latest .
+
+podman-compose -f compose.minipc.yml up -d   # mini PC x86 (referencia)
+podman-compose -f compose.pi.yml up -d       # Raspberry Pi (arm64, construir en la Pi)
 ```
 
-Requiere `dtoverlay=vc4-kms-v3d`, el usuario en los grupos `video` y `render`, y `avahi-daemon`.
+Ambas necesitan un host **sin entorno gráfico** (si no, el escritorio toma el DRM master), el
+usuario en los grupos `video` y `render`, y `avahi-daemon`. La Pi además `dtoverlay=vc4-kms-v3d`.
 Pasos completos en
-[`.local_knowledge/05-Operacion/Despliegue-Raspberry.md`](.local_knowledge/05-Operacion/Despliegue-Raspberry.md).
+[`Mini-PC-Setup.md`](.local_knowledge/04-Hardware/Mini-PC-Setup.md) y
+[`Despliegue-Raspberry.md`](.local_knowledge/05-Operacion/Despliegue-Raspberry.md).
 
 ## Comandos
 
@@ -125,7 +134,10 @@ el código:
 - El modo `kms` está implementado pero **no validado contra hardware**: falta probarlo en una Pi
   con proyector.
 - **La imagen arm64 todavía no se construyó.** Desde Windows no se puede: WSL2 no permite usar
-  `binfmt_misc`, así que no hay emulación qemu. Hay que construirla en la Pi o en CI.
+  `binfmt_misc`, así que no hay emulación qemu. Hay que construirla en la Pi o en CI. La imagen
+  amd64 sí está validada.
+- Los shaders se escriben en GLSL ES 3.0 para que sirvan en las dos plataformas, aunque en x86
+  habría OpenGL 4.x disponible. Es el costo del agnosticismo.
 - Bajo llvmpipe los números de rendimiento no significan nada; hay que medir en la Pi.
 - No hay autenticación. No exponer a internet.
 

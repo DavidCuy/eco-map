@@ -4,6 +4,9 @@ tags: [hardware, raspberry, setup]
 
 # Raspberry Pi — configuración
 
+Una de las dos plataformas soportadas; la otra es [[Mini-PC-Setup]], que es la de referencia.
+Ver [[ADR-013-Plataforma-Agnostica]].
+
 ## Modelo
 
 | Modelo | Veredicto |
