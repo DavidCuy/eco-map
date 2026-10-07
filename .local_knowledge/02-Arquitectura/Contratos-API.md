@@ -38,9 +38,20 @@ finos.
 ## Efectos
 
 ```
-GET    /api/effects                  # catálogo con manifiestos
-POST   /api/effects/reload           # re-escanea el directorio effects/
+GET    /api/effects                  [{id, name, version, tags, needs_camera, cost,
+                                       params, available, error}]
+POST   /api/effects/active           {id, params?}   -> {id, params}
+POST   /api/effects/reload           # re-escanea el directorio (Hito 2)
 ```
+
+Los efectos que no cargan aparecen igual en el listado, con `available: false` y
+el motivo en `error`: esconderlos haría que un efecto que desapareció parezca que
+nunca existió.
+
+`POST /active` responde con lo que el web **aceptó**. Si el shader no compila, el
+render lo desmiente después por el bus y el motivo queda en
+`SystemStatus.effect_error`. Mismo criterio que con la cámara: quien puede fallar
+de verdad es quien ejecuta.
 
 ## Escenas y capas
 
@@ -62,7 +73,6 @@ DELETE /api/layers/{id}
 ```
 GET    /api/system/status            {fps, frame_ms, cpu_temp, scene_id, render_up}
 POST   /api/system/blackout          {on: true}
-POST   /api/system/testpattern       {pattern: "grid"|"white"|"off"}
 POST   /api/calibration/auto         {method: "graycode"}   -> 202 + task_id
 GET    /api/calibration/auto/{task_id}
 
@@ -109,6 +119,7 @@ Servidor → cliente, 2 Hz:
 {"op":"blackout","on": true}
 {"op":"pattern", "name": "grid"}
 {"op":"camera",  "source": "v4l2:///dev/v4l/by-id/usb-XXXX-video-index0"}
+{"op":"effect",  "id": "grid_test", "params": {"cells": 24}}
 {"op":"scene",   "scene": {"calibration_version": 7, "surfaces": [
                    {"id": 1, "cols": 1, "rows": 1, "points": [[0.3,0.2], ...], "opacity": 1.0}]}}
 {"op":"ping"}

@@ -27,6 +27,30 @@ Un efecto **es un directorio**, no una clase de Python. Agregar un efecto = copi
 
 En la DB solo queda el espejo del manifiesto (`effect.id`, nombre, versión, `available`). Si el archivo desaparece, la fila queda con `available = 0` y las capas que lo usaban no se rompen.
 
+## El contrato del shader
+
+`frag.glsl` **no es un fragment shader completo**: aporta una función
+
+```glsl
+vec3 effect(vec2 uv) { ... }
+```
+
+y el loader la envuelve con el header de versión, los uniforms comunes y los
+parámetros del manifiesto, declarados con prefijo `p_`. Así un efecto no tiene que
+acordarse de declarar nada ni de qué versión de GLSL corre debajo — que cambia
+entre la Pi (ES 3.0), la mini PC (3.3 core) y el modo headless.
+
+El armado vive en `ecomap_core.effects`, que es puro: parsea, valida y arma texto,
+sin tocar OpenGL. Por eso lo usan los dos procesos — el web para listar y validar,
+el render para compilar.
+
+Reglas que hacen fallar la carga, a propósito y temprano:
+
+- El `id` del manifiesto tiene que coincidir con el nombre del directorio; si no,
+  elegir un efecto por id dejaría de ser determinista.
+- El `.glsl` tiene que definir `vec3 effect(`.
+- Un efecto roto **no impide cargar los demás**: se reporta y se sigue.
+
 ## Manifiesto
 
 ```json

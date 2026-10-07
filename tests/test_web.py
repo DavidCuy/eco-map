@@ -13,6 +13,7 @@ from ecomap_core.settings import Settings
 from ecomap_web.main import create_app
 
 MIGRATIONS = Path(__file__).resolve().parent.parent / "migrations"
+EFFECTS_DIR = Path(__file__).resolve().parent.parent / "effects"
 
 
 def _puerto_libre() -> int:
@@ -27,7 +28,7 @@ async def cliente(tmp_path: Path):
         db=tmp_path / "ecomap.db",
         migrations_dir=MIGRATIONS,
         bus=f"tcp://127.0.0.1:{_puerto_libre()}",  # nadie escucha: render offline
-        effects_dir=tmp_path / "effects",
+        effects_dir=EFFECTS_DIR,
         media_dir=tmp_path / "media",
     )
     app = create_app(settings)
@@ -45,7 +46,6 @@ async def test_status_reporta_render_offline(cliente):
     cuerpo = respuesta.json()
     assert cuerpo["render_up"] is False
     assert cuerpo["blackout"] is False
-    assert cuerpo["pattern"] == "off"
 
 
 async def test_dashboard_se_renderiza(cliente):
@@ -75,20 +75,14 @@ async def test_hx_request_devuelve_fragmento_html(cliente):
     client, _ = cliente
 
     respuesta = await client.post(
-        "/api/system/testpattern",
-        json={"pattern": "grid"},
+        "/api/system/blackout",
+        json={"on": True},
         headers={"HX-Request": "true"},
     )
 
     assert respuesta.status_code == 200
     assert respuesta.headers["content-type"].startswith("text/html")
     assert "hx-post" in respuesta.text
-
-
-async def test_patron_invalido_es_rechazado(cliente):
-    client, _ = cliente
-    respuesta = await client.post("/api/system/testpattern", json={"pattern": "arcoiris"})
-    assert respuesta.status_code == 422
 
 
 async def test_telemetria_del_bus_actualiza_el_estado(cliente):

@@ -19,13 +19,12 @@ from ecomap_core.protocol import (
     EV_TELE,
     OP_BLACKOUT,
     OP_CAMERA,
-    OP_PATTERN,
+    OP_EFFECT,
     OP_PING,
     OP_SCENE,
     ev,
 )
 from ecomap_core.settings import Settings, load_settings
-from ecomap_render import shaders
 from ecomap_render.bus import BusServer
 from ecomap_render.context import HeadlessPresenter, Presenter, create_presenter
 from ecomap_render.pipeline import Pipeline, ShaderError
@@ -43,7 +42,7 @@ class RenderApp:
         self.settings = settings
         self.running = True
         self.blackout = False
-        self.pattern = shaders.PATTERN_HELLO
+        self.effect_id: str | None = None
         self.scene_id: int | None = None
 
         self.bus = BusServer(settings.bus_address())
@@ -66,7 +65,9 @@ class RenderApp:
         self.bus.start()
         self.presenter = create_presenter(self.settings)
         try:
-            self.pipeline = Pipeline(self.presenter.ctx, self.presenter.size)
+            self.pipeline = Pipeline(
+                self.presenter.ctx, self.presenter.size, self.settings.effects_dir
+            )
         except ShaderError as exc:
             # Un shader que no compila no debe tumbar el proceso: se avisa y se
             # proyecta negro hasta que llegue uno bueno.
@@ -99,10 +100,8 @@ class RenderApp:
         elif operation == OP_BLACKOUT:
             self.blackout = bool(message.get("on"))
             log.info("blackout: %s", self.blackout)
-        elif operation == OP_PATTERN:
-            name = str(message.get("name", "off"))
-            self.pattern = shaders.PATTERN_BY_NAME.get(name, shaders.PATTERN_HELLO)
-            log.info("patron: %s", name)
+        elif operation == OP_EFFECT:
+            self._select_effect(str(message.get("id", "")), dict(message.get("params") or {}))
         elif operation == OP_CAMERA:
             self._select_camera(str(message.get("source", "")))
         elif operation == OP_SCENE:
@@ -131,12 +130,7 @@ class RenderApp:
             elapsed = now - started
             fbo = self.presenter.begin_frame()
             if self.pipeline is not None:
-                self.pipeline.render(
-                    fbo,
-                    time=elapsed,
-                    pattern=self.pattern,
-                    blackout=self.blackout,
-                )
+                self.pipeline.render(fbo, time=elapsed, blackout=self.blackout)
             else:
                 self.presenter.ctx.clear(0.0, 0.0, 0.0)
             self.presenter.end_frame()
@@ -160,6 +154,22 @@ class RenderApp:
                 # No se llego al presupuesto: se resincroniza para no acumular
                 # deuda y entrar en espiral.
                 next_frame = time.perf_counter()
+
+    def _select_effect(self, effect_id: str, params: dict[str, Any]) -> None:
+        """Cambia el efecto activo y reporta si no se pudo.
+
+        Un efecto que no compila o que no esta en el catalogo no corta la
+        proyeccion: se sigue con el anterior y la UI muestra el motivo.
+        """
+        if self.pipeline is None:
+            return
+        error = self.pipeline.set_effect(effect_id, params)
+        if error:
+            self.bus.publish(
+                ev(EV_ERROR, source="effect", level="error", msg=f"{effect_id}: {error}")
+            )
+        else:
+            self.effect_id = effect_id
 
     # --- escena ---
 

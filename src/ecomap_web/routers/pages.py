@@ -30,6 +30,7 @@ def dashboard(
     settings: SettingsDep,
 ) -> Response:
     from ecomap_web.routers.camera import devices_out
+    from ecomap_web.routers.effects import catalogo
 
     status = build_status(bus, state, request.app.state.version)
     return templates.TemplateResponse(
@@ -42,6 +43,7 @@ def dashboard(
             "devices": devices_out(),
             "selected": state.camera_source or settings.camera,
             "camera": state.camera,
+            "effects": catalogo(settings.effects_dir),
         },
     )
 

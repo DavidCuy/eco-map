@@ -14,7 +14,7 @@ import time
 from typing import Any
 
 from ecomap_core.protocol import EV_CAMERA, EV_ERROR, EV_TELE
-from ecomap_core.schemas import CameraStatus, Telemetry, TestPattern
+from ecomap_core.schemas import CameraStatus, Telemetry
 
 log = logging.getLogger(__name__)
 
@@ -26,7 +26,9 @@ class AppState:
         self.telemetry = Telemetry()
         self.last_telemetry_at: float | None = None
         self.blackout = False
-        self.pattern: TestPattern = "off"
+        self.effect: str | None = None
+        self.effect_params: dict[str, Any] = {}
+        self.effect_error: str | None = None
         self.camera = CameraStatus()
         self.camera_source: str | None = None
         self.logs: list[dict[str, Any]] = []
@@ -54,6 +56,10 @@ class AppState:
             if self.camera.source:
                 self.camera_source = self.camera.source
         elif kind == EV_ERROR:
+            if message.get("source") == "effect":
+                # El render no pudo usar el efecto pedido: queda visible en la
+                # UI en vez de perderse en el log.
+                self.effect_error = str(message.get("msg", ""))
             self.push_log(
                 level=str(message.get("level", "error")),
                 source=str(message.get("source", "render")),

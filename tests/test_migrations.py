@@ -24,7 +24,8 @@ def _settings(tmp_path: Path) -> Settings:
 
 def test_migraciones_crean_el_esquema(tmp_path: Path):
     aplicadas = migrate.run(_settings(tmp_path))
-    assert aplicadas == [1]
+    assert aplicadas == sorted(aplicadas)  # en orden de version
+    assert aplicadas[0] == 1
 
     conn = connect(tmp_path / "ecomap.db")
     tablas = {
@@ -35,8 +36,8 @@ def test_migraciones_crean_el_esquema(tmp_path: Path):
 
 def test_migraciones_son_idempotentes(tmp_path: Path):
     settings = _settings(tmp_path)
-    assert migrate.run(settings) == [1]
-    assert migrate.run(settings) == []  # segunda corrida: nada que hacer
+    assert migrate.run(settings)  # primera corrida: aplica todo
+    assert migrate.run(settings) == []  # segunda: nada que hacer
 
 
 def test_pragmas_aplicados(tmp_path: Path):
@@ -67,6 +68,9 @@ def test_settings_semilla_y_escritura(tmp_path: Path):
     conn = connect(tmp_path / "ecomap.db")
 
     assert get_setting(conn, "blackout") == "0"
+    assert get_setting(conn, "active_effect") == "grid_test"
+    # El patron de prueba del esqueleto ya no existe: es un efecto (US-10).
+    assert get_setting(conn, "test_pattern") is None
     set_setting(conn, "blackout", "1")
     assert get_setting(conn, "blackout") == "1"
 
