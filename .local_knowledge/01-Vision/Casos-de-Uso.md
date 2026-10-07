@@ -4,11 +4,14 @@ tags: [vision, requisitos]
 
 # Casos de uso
 
-## CU-01 Definir superficie
-Usuario abre la web, crea una **superficie**, la ve como quad sobre el preview y arrastra las 4 esquinas hasta que la proyección encaja con el objeto físico. Ver [[Modulo-Calibracion]].
+## CU-01 Definir una cara
+Usuario abre la web, crea una **superficie por cada cara física** del objeto, la ve como malla 1×1
+sobre el preview y arrastra las esquinas hasta que la proyección encaja. Una caja con tres caras
+visibles son tres superficies. Ver [[Modulo-Calibracion]] · [[ADR-015-Superficie-por-Cara-y-Malla]].
 
-## CU-02 Refinar con grilla
-Superficie no plana (columna, tela). Usuario sube la resolución de la malla (3x3, 5x5) y mueve puntos interiores. Ver [[Warping-y-Homografia]].
+## CU-02 Refinar con malla
+Superficie no plana o que no cierra con cuatro puntos (columna, tela, cartón abollado). Usuario sube
+la subdivisión (3×3, 5×5) y mueve puntos interiores. Ver [[Warping-y-Homografia]].
 
 ## CU-03 Auto-calibrar con cámara
 Usuario pulsa *Auto-calibrar*. El sistema proyecta patrones (Gray code / ArUco), la cámara los lee y calcula la homografía proyector↔cámara. Ver [[Modulo-Camara-Feedback]].

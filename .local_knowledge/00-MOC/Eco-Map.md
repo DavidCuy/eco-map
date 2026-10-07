@@ -15,8 +15,9 @@ Sistema que proyecta efectos visuales deformados (warping) sobre una superficie 
 
 - Producto → [[Vision-Producto]] · [[Casos-de-Uso]] · [[Glosario]] · [[Roadmap]]
 - Arquitectura → [[Arquitectura-General]] (diagramas) · [[Modelo-de-Datos]] · [[Contratos-API]]
+- UI → [[Direccion-de-UI]]
 - Módulos → [[Modulo-Web-API]] · [[Modulo-Calibracion]] · [[Modulo-Render]] · [[Modulo-Efectos]] · [[Modulo-Camara-Feedback]] · [[Modulo-Red]]
-- Decisiones vigentes → [[ADR-001-FastAPI]] · [[ADR-002-HTMX-Alpine]] · [[ADR-003-uv]] · [[ADR-004-SQLite]] · [[ADR-005-Motor-Render-OpenGL]] · [[ADR-006-IPC-Web-Render]] · [[ADR-009-Todo-en-Contenedores]] · [[ADR-010-Camara-USB]] · [[ADR-011-Archivos-vs-DB]] · [[ADR-012-Podman-Desarrollo-Local]] · [[ADR-013-Plataforma-Agnostica]] · [[ADR-014-Podman-Rootful]]
+- Decisiones vigentes → [[ADR-001-FastAPI]] · [[ADR-002-HTMX-Alpine]] · [[ADR-003-uv]] · [[ADR-004-SQLite]] · [[ADR-005-Motor-Render-OpenGL]] · [[ADR-006-IPC-Web-Render]] · [[ADR-009-Todo-en-Contenedores]] · [[ADR-010-Camara-USB]] · [[ADR-011-Archivos-vs-DB]] · [[ADR-012-Podman-Desarrollo-Local]] · [[ADR-013-Plataforma-Agnostica]] · [[ADR-014-Podman-Rootful]] · [[ADR-015-Superficie-por-Cara-y-Malla]]
 - Decisiones reemplazadas → [[ADR-007-Docker]] → [[ADR-009-Todo-en-Contenedores]] · [[ADR-008-Camara-Picamera2]] → [[ADR-010-Camara-USB]]
 - Hardware → [[Mini-PC-Setup]] · [[Raspberry-Pi-Setup]] · [[Proyector]] · [[Camara]]
 - Operación → [[Docker-Local]] · [[Despliegue-Raspberry]] · [[Estructura-Repositorio]] · [[Seguridad-y-Red]]

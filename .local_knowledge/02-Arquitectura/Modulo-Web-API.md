@@ -30,7 +30,8 @@ Reparto de trabajo:
 | `/settings` | Resolución, fps objetivo, escena de arranque |
 | `/settings/network` | Estado de red, escaneo wifi, conexión, modo AP. Ver [[Modulo-Red]] |
 
-API JSON en [[Contratos-API]].
+API JSON en [[Contratos-API]]. La dirección visual del dashboard, que cambia con el Hito 1, está en
+[[Direccion-de-UI]].
 
 ## Estructura de la app
 
