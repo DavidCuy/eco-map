@@ -21,6 +21,12 @@ class Telemetry(BaseModel):
     # De operacion recibida a frame presentado: el tramo de la latencia que el
     # render controla (RNF-2).
     apply_ms: float = 0.0
+    # Camara: lo que mide el hilo de vision. En dos nucleos es el riesgo
+    # principal, asi que se publica.
+    camera_fps: float = 0.0
+    camera_read_ms: float = 0.0
+    camera_motion_ms: float = 0.0
+    motion: float = 0.0
     temp: float | None = None
     dropped: int = 0
     scene_id: int | None = None
@@ -36,6 +42,10 @@ class SystemStatus(BaseModel):
     frame_ms: float
     frame_ms_max: float
     apply_ms: float
+    camera_fps: float
+    camera_read_ms: float
+    camera_motion_ms: float
+    motion: float
     temp: float | None
     dropped: int
     scene_id: int | None
@@ -68,6 +78,7 @@ class EffectOut(BaseModel):
     version: str
     tags: list[str] = []
     needs_camera: bool = False
+    needs_feedback: bool = False
     cost: str = "low"
     params: list[EffectParamOut] = []
     available: bool = True
@@ -123,6 +134,19 @@ class CameraStatus(BaseModel):
     fps: float | None = None
     backend: str | None = None
     message: str | None = None
+
+
+class MotionSettings(BaseModel):
+    """Ajustes de la deteccion de movimiento.
+
+    Son las perillas contra la realimentacion optica: subir la banda muerta
+    ignora el titileo de la proyeccion, bajar el suavizado hace que responda
+    mas rapido pero realimente mas facil.
+    """
+
+    dead_band: float = Field(default=0.02, ge=0.0, le=0.5)
+    smoothing: float = Field(default=0.25, gt=0.0, le=1.0)
+    threshold: int = Field(default=25, ge=1, le=120)
 
 
 class CameraSelectRequest(BaseModel):

@@ -112,6 +112,9 @@ def listar(conn: sqlite3.Connection) -> list[dict[str, Any]]:
                 "version": fila["version"],
                 "tags": manifiesto.get("tags", []),
                 "needs_camera": bool(fila["needs_camera"]),
+                # Sale del manifiesto y no de una columna: es un detalle de
+                # como se dibuja, no algo por lo que se vaya a consultar.
+                "needs_feedback": bool(manifiesto.get("needs_feedback")),
                 "cost": fila["cost"],
                 "params": manifiesto.get("params", []),
                 "available": bool(fila["available"]),

@@ -83,10 +83,37 @@ class Layer:
         self.texture.repeat_y = False
         self.fbo = ctx.framebuffer(color_attachments=[self.texture])
 
+        # Realimentacion: una capa que la pide lee su propio frame anterior en
+        # `u_prev`. Cuesta una textura y un FBO extra, por eso es opcional.
+        self.needs_feedback = bool(datos.get("needs_feedback"))
+        self.prev_texture = None
+        self.prev_fbo = None
+        if self.needs_feedback:
+            self.prev_texture = ctx.texture(self.size, components=4)
+            self.prev_texture.filter = (moderngl.LINEAR, moderngl.LINEAR)
+            self.prev_texture.repeat_x = False
+            self.prev_texture.repeat_y = False
+            self.prev_fbo = ctx.framebuffer(color_attachments=[self.prev_texture])
+
+    def swap_feedback(self) -> None:
+        """Intercambia los dos buffers: lo recien dibujado pasa a ser `u_prev`.
+
+        Es ping-pong clasico: dibujar y leer la misma textura en el mismo pase
+        es comportamiento indefinido.
+        """
+        if not self.needs_feedback:
+            return
+        self.texture, self.prev_texture = self.prev_texture, self.texture
+        self.fbo, self.prev_fbo = self.prev_fbo, self.fbo
+
     def release(self) -> None:
         self.mesh.release()
         self.fbo.release()
         self.texture.release()
+        if self.prev_fbo is not None:
+            self.prev_fbo.release()
+        if self.prev_texture is not None:
+            self.prev_texture.release()
 
 
 class Pipeline:
@@ -111,6 +138,14 @@ class Pipeline:
 
         self.library = EffectLibrary(ctx, effects_dir, self.header)
         self.library.reload()
+        # Textura negra de 1x1 para los efectos que piden camara cuando no hay:
+        # sin esto el sampler queda sin enlazar y el resultado es indefinido.
+        self._sin_camara = ctx.texture((1, 1), components=3, data=bytes(3))
+        self._cam_texture = None
+        self._cam_seq = -1
+        self.motion = 0.0
+        self.motion_pos = (0.5, 0.5)
+
         self.layers: list[Layer] = []
         self.scene_id: int | None = None
         self.fallback_effect: str | None = None
@@ -156,6 +191,30 @@ class Pipeline:
         self.fallback_params = params or {}
         return None
 
+    # --- camara ---
+
+    def update_camera(self, frame, seq: int) -> None:
+        """Sube el ultimo frame de camara a GPU.
+
+        Solo cuando hay uno nuevo: el hilo de vision va a 15 fps y el render a
+        60, asi que tres de cada cuatro frames reusan la textura.
+        """
+        if frame is None or seq == self._cam_seq:
+            return
+        alto, ancho = frame.shape[:2]
+        if self._cam_texture is None or self._cam_texture.size != (ancho, alto):
+            if self._cam_texture is not None:
+                self._cam_texture.release()
+            self._cam_texture = self.ctx.texture((ancho, alto), components=3)
+            self._cam_texture.filter = (moderngl.LINEAR, moderngl.LINEAR)
+        # OpenCV entrega BGR y con el origen arriba; GL espera RGB desde abajo.
+        self._cam_texture.write(frame[::-1, :, ::-1].tobytes())
+        self._cam_seq = seq
+
+    def _bind_camera(self) -> None:
+        textura = self._cam_texture or self._sin_camara
+        textura.use(location=1)
+
     # --- dibujo ---
 
     def render(self, target: moderngl.Framebuffer, *, time: float, blackout: bool) -> None:
@@ -169,7 +228,9 @@ class Pipeline:
             return
 
         for capa in self.layers:
-            self._render_effect(capa.fbo, capa.size, capa.effect_id, capa.params, time)
+            self._render_effect(
+                capa.fbo, capa.size, capa.effect_id, capa.params, time, capa
+            )
 
         target.use()
         self.ctx.clear(0.0, 0.0, 0.0)
@@ -181,6 +242,9 @@ class Pipeline:
             self._set(self.warp_program, "u_opacity", capa.mesh.opacity)
             capa.mesh.render()
         self.ctx.disable(moderngl.BLEND)
+
+        for capa in self.layers:
+            capa.swap_feedback()
 
     def _render_fallback(self, target: moderngl.Framebuffer, time: float) -> None:
         target.use()
@@ -195,13 +259,28 @@ class Pipeline:
         effect_id: str,
         params: dict[str, Any],
         time: float,
+        capa: Layer | None = None,
     ) -> None:
         compilado = self.library.get(effect_id)
         if compilado is None:
             return
         fbo.use()
         self.ctx.clear(0.0, 0.0, 0.0, 0.0)
-        compilado.set_common(u_time=time, u_resolution=(float(size[0]), float(size[1])))
+
+        self._bind_camera()
+        if capa is not None and capa.prev_texture is not None:
+            capa.prev_texture.use(location=2)
+        else:
+            self._sin_camara.use(location=2)
+
+        compilado.set_common(
+            u_time=time,
+            u_resolution=(float(size[0]), float(size[1])),
+            u_cam=1,
+            u_prev=2,
+            u_motion=self.motion,
+            u_motion_pos=self.motion_pos,
+        )
         compilado.apply_params(params)
         compilado.render()
 
@@ -228,4 +307,7 @@ class Pipeline:
         self.library.release()
         self._fallback_fbo.release()
         self._fallback_tex.release()
+        self._sin_camara.release()
+        if self._cam_texture is not None:
+            self._cam_texture.release()
         self.warp_program.release()

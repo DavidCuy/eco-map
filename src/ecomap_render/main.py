@@ -22,6 +22,7 @@ from ecomap_core.protocol import (
     OP_CAMERA,
     OP_EFFECT,
     OP_EFFECTS_RELOAD,
+    OP_MOTION,
     OP_PING,
     OP_SCENE,
     ev,
@@ -30,9 +31,11 @@ from ecomap_core.settings import Settings, load_settings
 from ecomap_render.bus import BusServer
 from ecomap_render.context import HeadlessPresenter, Presenter, create_presenter
 from ecomap_render.pipeline import Pipeline, ShaderError
-from ecomap_render.preview import FrameStore, PreviewServer, encode_jpeg
+from ecomap_render.preview import FrameStore, PreviewServer, encode_jpeg, encode_jpeg_bgr
 from ecomap_render.telemetry import FrameTimer, read_temp
-from ecomap_vision.source import CameraError, CameraSource, open_source
+from ecomap_vision.capture import CameraThread
+from ecomap_vision.motion import MotionDetector
+from ecomap_vision.source import CameraError
 
 log = logging.getLogger(__name__)
 
@@ -56,14 +59,16 @@ class RenderApp:
         self.pipeline: Pipeline | None = None
         self.timer = FrameTimer()
         self.frames = FrameStore()
+        self.camera_frames = FrameStore()
         self.preview: PreviewServer | None = None
         self._temp: float | None = None
         self._temp_at = 0.0
         self._preview_at = 0.0
         self._tele_at = 0.0
         self._preview_warned = False
-        self.camera: CameraSource | None = None
+        self.camera: CameraThread | None = None
         self.camera_source: str | None = None
+        self.detector = MotionDetector()
 
     # --- arranque y parada ---
 
@@ -82,7 +87,9 @@ class RenderApp:
             self.blackout = True
         self._publish_effects()
         if isinstance(self.presenter, HeadlessPresenter):
-            self.preview = PreviewServer(self.settings.preview_port, self.frames)
+            self.preview = PreviewServer(
+                self.settings.preview_port, self.frames, self.camera_frames
+            )
             self.preview.start()
 
     def teardown(self) -> None:
@@ -113,6 +120,16 @@ class RenderApp:
                 self._publish_effects()
         elif operation == OP_EFFECT:
             self._select_effect(str(message.get("id", "")), dict(message.get("params") or {}))
+        elif operation == OP_MOTION:
+            self.detector.dead_band = float(message.get("dead_band", self.detector.dead_band))
+            self.detector.smoothing = float(message.get("smoothing", self.detector.smoothing))
+            self.detector.threshold = int(message.get("threshold", self.detector.threshold))
+            log.info(
+                "deteccion: banda muerta %.3f, suavizado %.2f, umbral %d",
+                self.detector.dead_band,
+                self.detector.smoothing,
+                self.detector.threshold,
+            )
         elif operation == OP_CAMERA:
             self._select_camera(str(message.get("source", "")))
         elif operation == OP_SCENE:
@@ -155,6 +172,7 @@ class RenderApp:
                 self.apply_ms = (time.perf_counter() - self._op_recibida) * 1000.0
                 self._op_recibida = None
 
+            self._update_camera()
             self._maybe_preview(now)
             self._maybe_telemetry(now, tele_period)
 
@@ -228,10 +246,11 @@ class RenderApp:
         if self.camera is None:
             return
         try:
-            self.camera.close()
+            self.camera.stop()
         except Exception:  # noqa: BLE001 - cerrar no debe tumbar el render
             log.warning("camara: fallo al cerrar", exc_info=True)
         self.camera = None
+        self.detector.reset()  # el fondo de la camara vieja no sirve
 
     def _select_camera(self, source: str) -> None:
         """Abre la camara pedida y reporta el resultado real por el bus.
@@ -246,8 +265,10 @@ class RenderApp:
             self.bus.publish(ev(EV_CAMERA, state="closed", source=None))
             return
         try:
-            self.camera = open_source(source)
+            self.camera = CameraThread(source, detector=self.detector)
+            self.camera.start()
         except CameraError as exc:
+            self.camera = None
             log.warning("camara: %s", exc)
             self.bus.publish(ev(EV_CAMERA, state="error", source=source, message=str(exc)))
             return
@@ -272,12 +293,26 @@ class RenderApp:
             )
         )
 
+    def _update_camera(self) -> None:
+        """Pasa el ultimo frame y el movimiento al pipeline.
+
+        El hilo de vision va a 15 fps y el loop a 60: la textura solo se sube
+        cuando hay un frame nuevo, lo demas seria copiar lo mismo tres veces.
+        """
+        if self.camera is None or self.pipeline is None:
+            return
+        frame, _chico, seq = self.camera.latest()
+        self.pipeline.update_camera(frame, seq)
+        self.pipeline.motion = self.camera.motion
+        self.pipeline.motion_pos = self.camera.motion_pos
+
     def _maybe_preview(self, now: float) -> None:
         if self.preview is None or not isinstance(self.presenter, HeadlessPresenter):
             return
         if now - self._preview_at < 1.0 / max(self.settings.preview_fps, 1):
             return
         self._preview_at = now
+        self._publicar_camara()
         width, height = self.presenter.size
         jpeg = encode_jpeg(self.presenter.read(), width, height)
         if jpeg is None:
@@ -286,6 +321,19 @@ class RenderApp:
                 self._preview_warned = True
             return
         self.frames.put(jpeg)
+
+    def _publicar_camara(self) -> None:
+        """Publica el ultimo frame de camara como MJPEG, al mismo ritmo que el
+        preview de la proyeccion: es para apuntar la camara, no para monitorear."""
+        if self.camera is None:
+            return
+        frame, _chico, _seq = self.camera.latest()
+        if frame is None:
+            return
+        alto, ancho = frame.shape[:2]
+        jpeg = encode_jpeg_bgr(frame, ancho, alto)
+        if jpeg is not None:
+            self.camera_frames.put(jpeg)
 
     def _maybe_telemetry(self, now: float, period: float) -> None:
         if now - self._tele_at < period:
@@ -302,6 +350,10 @@ class RenderApp:
                 frame_ms_max=round(self.timer.frame_ms_max, 2),
                 temp=self._temp,
                 dropped=self.bus.dropped_events,
+                camera_fps=round(self.camera.stats.fps, 1) if self.camera else 0.0,
+                camera_read_ms=round(self.camera.stats.read_ms, 2) if self.camera else 0.0,
+                camera_motion_ms=round(self.camera.motion_ms, 2) if self.camera else 0.0,
+                motion=round(self.camera.motion, 3) if self.camera else 0.0,
                 scene_id=self.scene_id,
                 apply_ms=round(self.apply_ms, 2),
                 mode=self.settings.render_mode,

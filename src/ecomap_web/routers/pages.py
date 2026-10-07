@@ -42,6 +42,7 @@ def dashboard(
     settings: SettingsDep,
     db: DbDep,
 ) -> Response:
+    from ecomap_web.routers import camera as camera_router
     from ecomap_web.routers.camera import devices_out
     from ecomap_web.routers.effects import catalogo, valores_efectivos
     from ecomap_web.services import effects as effect_service
@@ -69,6 +70,8 @@ def dashboard(
             "devices": devices_out(),
             "selected": state.camera_source or settings.camera,
             "camera": state.camera,
+            "motion": camera_router.obtener_motion(db),
+            "camera_stream": f"{preview_url}camera",
             "effects": catalogo(db, state),
             "scenes": scene_service.listar(db),
             "surfaces": surface_service.listar(db),

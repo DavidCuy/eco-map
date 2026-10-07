@@ -22,6 +22,7 @@ OP_BLACKOUT = "blackout"
 OP_EFFECT = "effect"
 OP_CAMERA = "camera"
 OP_EFFECTS_RELOAD = "effects_reload"
+OP_MOTION = "motion"
 
 OPS = frozenset(
     {
@@ -33,6 +34,7 @@ OPS = frozenset(
         OP_EFFECT,
         OP_EFFECTS_RELOAD,
         OP_CAMERA,
+        OP_MOTION,
     }
 )
 

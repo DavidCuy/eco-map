@@ -554,3 +554,15 @@ async def test_con_el_render_caido_el_valor_igual_se_persiste(cliente):
     assert json.loads(guardado["value"])["brightness"] == 0.5
     eventos = app.state.db.execute("SELECT message FROM event_log").fetchall()
     assert any("render no estaba conectado" in e["message"] for e in eventos)
+
+
+async def test_el_catalogo_expone_needs_feedback(cliente):
+    """Regresion: se guardaba en el manifiesto pero `listar` no lo devolvia, y
+    la API decia que camera_echo no necesitaba realimentacion cuando si."""
+    client, _, _ = cliente
+
+    cuerpo = (await client.get("/api/effects")).json()
+
+    echo = next(e for e in cuerpo if e["id"] == "camera_echo")
+    assert echo["needs_feedback"] is True
+    assert echo["needs_camera"] is True

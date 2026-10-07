@@ -54,20 +54,40 @@ def encode_jpeg(rgb: bytes, width: int, height: int, quality: int = 70) -> bytes
     return buffer.tobytes() if ok else None
 
 
+def encode_jpeg_bgr(frame, width: int, height: int, quality: int = 70) -> bytes | None:
+    """Comprime un frame de OpenCV.
+
+    A diferencia de `encode_jpeg`, este no voltea ni reordena canales: lo que
+    sale de la camara ya viene BGR y con el origen arriba, que es justo lo que
+    `imencode` espera.
+    """
+    try:
+        import cv2
+    except ImportError:
+        return None
+    ok, buffer = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
+    return buffer.tobytes() if ok else None
+
+
 class _Handler(BaseHTTPRequestHandler):
-    store: FrameStore  # inyectado por PreviewServer
+    store: FrameStore       # proyeccion, inyectado por PreviewServer
+    camera_store: FrameStore  # camara
 
     def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
         log.debug("preview: " + format, *args)
 
     def do_GET(self) -> None:  # noqa: N802 - firma de BaseHTTPRequestHandler
-        if self.path.startswith("/snapshot"):
-            self._snapshot()
+        # Dos streams en el mismo servidor: la proyeccion y la camara. Son dos
+        # cosas distintas y se confunden facil — el de la camara sirve para
+        # apuntarla, el de la proyeccion para ver que se esta dibujando.
+        store = self.camera_store if self.path.startswith("/camera") else self.store
+        if self.path.endswith("/snapshot"):
+            self._snapshot(store)
         else:
-            self._stream()
+            self._stream(store)
 
-    def _snapshot(self) -> None:
-        item = self.store.get_after(-1, timeout=2.0)
+    def _snapshot(self, store: FrameStore) -> None:
+        item = store.get_after(-1, timeout=2.0)
         if item is None:
             self.send_error(503, "sin frame todavia")
             return
@@ -78,7 +98,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(jpeg)
 
-    def _stream(self) -> None:
+    def _stream(self, store: FrameStore) -> None:
         self.send_response(200)
         self.send_header("Content-Type", f"multipart/x-mixed-replace; boundary={BOUNDARY}")
         self.send_header("Cache-Control", "no-store")
@@ -86,7 +106,7 @@ class _Handler(BaseHTTPRequestHandler):
         seq = -1
         try:
             while True:
-                item = self.store.get_after(seq)
+                item = store.get_after(seq)
                 if item is None:
                     continue
                 jpeg, seq = item
@@ -100,8 +120,8 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 class PreviewServer:
-    def __init__(self, port: int, store: FrameStore) -> None:
-        handler = type("Handler", (_Handler,), {"store": store})
+    def __init__(self, port: int, store: FrameStore, camera_store: FrameStore) -> None:
+        handler = type("Handler", (_Handler,), {"store": store, "camera_store": camera_store})
         self._httpd = ThreadingHTTPServer(("0.0.0.0", port), handler)  # noqa: S104
         self._httpd.daemon_threads = True
         self._thread = threading.Thread(
@@ -110,7 +130,10 @@ class PreviewServer:
 
     def start(self) -> None:
         self._thread.start()
-        log.info("preview: MJPEG en http://0.0.0.0:%s/", self._httpd.server_port)
+        log.info(
+            "preview: MJPEG en http://0.0.0.0:%s/ (proyeccion) y /camera",
+            self._httpd.server_port,
+        )
 
     def stop(self) -> None:
         self._httpd.shutdown()

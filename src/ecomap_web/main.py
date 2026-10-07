@@ -17,7 +17,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from ecomap_core.protocol import OP_CAMERA, OP_EFFECT, OP_PING, op
+from ecomap_core.protocol import OP_CAMERA, OP_EFFECT, OP_MOTION, OP_PING, op
 from ecomap_core.settings import Settings, load_settings
 from ecomap_web import migrate
 from ecomap_web.bus import BusClient
@@ -77,6 +77,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 await bus.send(op(OP_EFFECT, id=state.effect, params=state.effect_params))
             if state.camera_source:
                 await bus.send(op(OP_CAMERA, source=state.camera_source))
+            await bus.send(
+                op(
+                    OP_MOTION,
+                    dead_band=float(get_setting(conn, "motion_dead_band", "0.02") or 0.02),
+                    smoothing=float(get_setting(conn, "motion_smoothing", "0.25") or 0.25),
+                    threshold=int(get_setting(conn, "motion_threshold", "25") or 25),
+                )
+            )
             # La escena completa: el render no abre la base, asi que todo lo que
             # necesita para dibujar se lo manda el web al (re)conectar.
             await scene_service.push(bus, conn)
@@ -91,6 +99,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.version = _version()
         # Las escrituras de parametros se agrupan: ver services/persist.py.
         app.state.writer = DebouncedWriter()
+        # El preview de camara lo sirve el render, en su propio puerto. Se
+        # guarda el puerto y la URL se arma con el host del pedido, que es lo
+        # unico que sabe por donde entro el navegador.
+        app.state.preview_port = settings.preview_port
         log.info("web listo en http://%s:%s", settings.host, settings.port)
         try:
             yield

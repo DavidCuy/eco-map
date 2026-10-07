@@ -36,7 +36,28 @@ contornos → área total = u_motion ; centroide = u_motion_pos
 ```
 Se publican como uniforms al render. **No** se hace detección de personas ni ML en v1: no da el presupuesto de CPU. Ver [[Presupuesto-de-Rendimiento]].
 
-Riesgo real: **lazo de realimentación positiva** — la cámara ve la proyección, eso genera movimiento, el efecto crece, la cámara ve más. Mitigaciones: restar el frame proyectado conocido (usando `H`), banda muerta en el umbral, y suavizado temporal (EMA) de `u_motion`.
+Riesgo real: **lazo de realimentación positiva** — la cámara ve la proyección, eso genera
+movimiento, el efecto crece, la cámara ve más. Las mitigaciones implementadas, en dos lugares:
+
+**En la detección** (`ecomap_vision/motion.py`), tres perillas ajustables desde la UI:
+
+- **Banda muerta**: por debajo de un umbral el movimiento es cero. Corta el ruido de sensor y el
+  titileo de la proyección.
+- **Suavizado temporal (EMA)**: el valor no puede saltar de golpe, así que un pico no realimenta.
+- **Fondo adaptativo lento**: un cambio de luz ambiente deja de contar al rato; una persona que
+  pasa sí cuenta.
+
+**En el efecto** (`camera_echo`), tres frenos más: `decay` siempre menor que 1 — el pasado se apaga
+en vez de acumularse —, `gain` que limita cuánto aporta la cámara por frame, y saturación final con
+`min()`.
+
+Verificado sin hardware que el efecto **no crece solo**: 45 segundos con entrada en movimiento
+constante, muestreando el brillo medio cada 5 s, dio 23–29 sin tendencia ascendente. Eso prueba que
+el estado estacionario existe; que el lazo **óptico** no se dispare necesita proyector y cámara
+apuntándose, y está en la checklist.
+
+Queda pendiente la cuarta mitigación, que es la más fuerte: **restar el frame proyectado conocido**
+usando la homografía de la auto-calibración (Hito 5).
 
 ## Selección de cámara
 
@@ -60,6 +81,31 @@ Una cámara que no se puede abrir **no corta la proyección**: el render queda s
 cámara, avisa, y los efectos que piden `u_cam` reciben textura negra.
 
 Estados y contrato en [[Contratos-API]].
+
+## Medición del costo, que es lo que preocupa en dos núcleos
+
+El hilo de visión publica su propio costo en la telemetría, porque es el riesgo
+principal con la mini PC: captura, lectura, reducción y detección. Medido en desarrollo con
+video simulado a 640×480:
+
+| etapa | medido |
+|---|---|
+| captura | 15 fps |
+| leer y decodificar | 0.3–0.6 ms |
+| detectar movimiento | 0.35–0.8 ms |
+
+Son números de un `FakeSource` leyendo un mp4: una webcam real decodifica MJPEG de verdad y va a
+costar más. Está en la checklist de hardware.
+
+## Realimentación en los efectos: `u_prev`
+
+Un shader no tiene memoria: cada frame arranca de cero. Para que `camera_echo` pueda dejar estela,
+una capa que declara `needs_feedback` en su manifiesto recibe **su propio frame anterior** en
+`u_prev`, con ping-pong de dos texturas — dibujar y leer la misma textura en el mismo pase es
+comportamiento indefinido.
+
+Cuesta una textura y un FBO extra por capa, así que se pide explícitamente en vez de dárselo a
+todas.
 
 ## Implementación
 

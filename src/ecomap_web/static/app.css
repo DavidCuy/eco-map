@@ -242,3 +242,17 @@
   background: color-mix(in srgb, var(--ecomap-accent) 18%, transparent);
   font-size: 0.9rem;
 }
+
+/* --- cámara --- */
+
+.camera-stream {
+  width: 100%;
+  max-width: 420px;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--pico-border-radius);
+  background: #000;
+}
+
+.motion-live { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; font-size: 0.85rem; }
+.motion-live progress { width: 120px; margin: 0; }

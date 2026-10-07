@@ -250,6 +250,9 @@ def serializar(conn: sqlite3.Connection) -> dict[str, Any]:
                     "effect": capa["effect_id"],
                     "params": capa["params"],
                     "blend": capa["blend_mode"],
+                    # El render necesita saberlo al construir la capa: una capa
+                    # con realimentacion lleva una textura y un FBO extra.
+                    "needs_feedback": _needs_feedback(conn, capa["effect_id"]),
                     "surface": {
                         "id": superficie["id"],
                         "cols": superficie["mesh_cols"],
@@ -269,6 +272,16 @@ def serializar(conn: sqlite3.Connection) -> dict[str, Any]:
         "fallback_effect": get_setting(conn, "active_effect") or None,
         "fallback_params": json.loads(get_setting(conn, "active_effect_params", "{}") or "{}"),
     }
+
+
+def _needs_feedback(conn: sqlite3.Connection, effect_id: str) -> bool:
+    fila = conn.execute("SELECT manifest FROM effect WHERE id = ?", (effect_id,)).fetchone()
+    if fila is None:
+        return False
+    try:
+        return bool(json.loads(fila["manifest"]).get("needs_feedback"))
+    except (ValueError, TypeError):
+        return False
 
 
 async def push(bus: BusClient, conn: sqlite3.Connection) -> bool:
