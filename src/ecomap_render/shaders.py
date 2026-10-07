@@ -88,7 +88,41 @@ void main() {
 """
 
 
+# --- warp: dibuja el FBO del efecto sobre la malla de una superficie ---
+
+_WARP_VERTEX = """
+in vec2 in_position;
+in vec3 in_uvq;
+out vec3 v_uvq;
+void main() {
+    v_uvq = in_uvq;
+    gl_Position = vec4(in_position, 0.0, 1.0);
+}
+"""
+
+_WARP_FRAGMENT = """
+in vec3 v_uvq;
+out vec4 f_color;
+
+uniform sampler2D u_texture;
+uniform float u_opacity;
+
+void main() {
+    // La division por w es lo que evita el quiebre diagonal al interpolar UV
+    // sobre los dos triangulos de una celda deformada.
+    vec2 uv = v_uvq.xy / v_uvq.z;
+    f_color = vec4(texture(u_texture, uv).rgb, 1.0) * u_opacity;
+}
+"""
+
+
 def sources(is_gles: bool) -> tuple[str, str]:
-    """Devuelve (vertex, fragment) con el header adecuado al contexto."""
+    """Devuelve (vertex, fragment) del efecto, con el header del contexto."""
     header = _HEADER_ES if is_gles else _HEADER_CORE
     return header + _VERTEX, header + _FRAGMENT
+
+
+def warp_sources(is_gles: bool) -> tuple[str, str]:
+    """Devuelve (vertex, fragment) del paso de warp."""
+    header = _HEADER_ES if is_gles else _HEADER_CORE
+    return header + _WARP_VERTEX, header + _WARP_FRAGMENT

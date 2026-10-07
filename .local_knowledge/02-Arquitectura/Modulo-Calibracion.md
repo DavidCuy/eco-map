@@ -50,7 +50,9 @@ acabado para la instalación final, no un requisito de v1 ([[ADR-015-Superficie-
 
 ## Reglas de datos
 
-- Los puntos se guardan normalizados y ordenados **TL, TR, BR, BL**.
+- Los puntos se guardan normalizados 0..1, con origen arriba a la izquierda, en **orden
+  fila-mayor**: la fila de arriba de izquierda a derecha, después la siguiente. Para una malla 1×1
+  eso da TL, TR, BL, BR. Es el orden que generaliza a cualquier subdivisión.
 - Cada edición guarda `updated_at`; la escena mantiene un `calibration_version` para invalidar cachés de matriz en el render.
 - Exportar/importar calibración como JSON (respaldo antes de tocar el proyector).
 

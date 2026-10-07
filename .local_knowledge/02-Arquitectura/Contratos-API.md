@@ -8,15 +8,32 @@ Prefijo `/api`. Todo Pydantic v2. OpenAPI automático en `/docs`.
 
 ## Superficies
 
+Una superficie por cada cara física, y toda superficie es una malla ([[ADR-015-Superficie-por-Cara-y-Malla]]).
+
 ```
 GET    /api/surfaces
-POST   /api/surfaces                 {name, kind, mesh_cols, mesh_rows}
+POST   /api/surfaces                 {name, mesh_cols?, mesh_rows?}   -> 201
 GET    /api/surfaces/{id}
-PATCH  /api/surfaces/{id}            {name?, opacity?, enabled?, mask?}
-PUT    /api/surfaces/{id}/points     {points: [[x,y],...]}   # normalizado 0..1
-DELETE /api/surfaces/{id}
-POST   /api/surfaces/{id}/reset      # vuelve a quad full-screen
+PATCH  /api/surfaces/{id}            {name?, opacity?, enabled?}
+PUT    /api/surfaces/{id}/points     {points: [[x,y],...]}
+POST   /api/surfaces/{id}/subdivide  {cols, rows}
+POST   /api/surfaces/{id}/reset      # malla regular a pantalla completa
+DELETE /api/surfaces/{id}            -> 204
 ```
+
+**Convención de puntos**: normalizados 0..1, origen arriba a la izquierda, **orden fila-mayor**.
+Una malla de `cols` × `rows` celdas tiene `(cols+1) × (rows+1)` puntos; para 1×1 el orden es
+TL, TR, BL, BR. Se acepta salirse un poco del rango (hasta -1..2): al calibrar a veces hay que tirar
+una esquina fuera de pantalla.
+
+`kind` es **derivado**, no se elige: `quad` cuando la malla es 1×1, `mesh` en cualquier otro caso.
+
+Una cantidad de puntos que no corresponde a la subdivisión devuelve **422**, igual que un cuerpo que
+no valida.
+
+`subdivide` conserva la forma: al subir la resolución los puntos nuevos se interpolan con
+Catmull-Rom, así que la superficie se refina sin deformarse. Al bajarla se pierden los ajustes
+finos.
 
 ## Efectos
 
@@ -92,6 +109,8 @@ Servidor → cliente, 2 Hz:
 {"op":"blackout","on": true}
 {"op":"pattern", "name": "grid"}
 {"op":"camera",  "source": "v4l2:///dev/v4l/by-id/usb-XXXX-video-index0"}
+{"op":"scene",   "scene": {"calibration_version": 7, "surfaces": [
+                   {"id": 1, "cols": 1, "rows": 1, "points": [[0.3,0.2], ...], "opacity": 1.0}]}}
 {"op":"ping"}
 ```
 Render → web:

@@ -81,3 +81,43 @@ class CameraSelectRequest(BaseModel):
         min_length=1,
         max_length=512,
     )
+
+
+# --- superficies ---------------------------------------------------------
+
+Punto = tuple[float, float]
+
+
+class SurfaceCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    mesh_cols: int = Field(default=1, ge=1, le=32)
+    mesh_rows: int = Field(default=1, ge=1, le=32)
+
+
+class SurfaceUpdate(BaseModel):
+    """Todo opcional: es un PATCH. Lo que no viene, no se toca."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    opacity: float | None = Field(default=None, ge=0.0, le=1.0)
+    enabled: bool | None = None
+
+
+class PointsIn(BaseModel):
+    points: list[Punto] = Field(min_length=4)
+
+
+class SubdivideIn(BaseModel):
+    cols: int = Field(ge=1, le=32)
+    rows: int = Field(ge=1, le=32)
+
+
+class SurfaceOut(BaseModel):
+    id: int
+    name: str
+    kind: str
+    mesh_cols: int
+    mesh_rows: int
+    points: list[Punto]
+    opacity: float
+    enabled: bool
+    updated_at: str

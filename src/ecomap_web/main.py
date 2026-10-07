@@ -21,7 +21,8 @@ from ecomap_core.settings import Settings, load_settings
 from ecomap_web import migrate
 from ecomap_web.bus import BusClient
 from ecomap_web.db import connect, get_setting
-from ecomap_web.routers import camera, pages, system, ws
+from ecomap_web.routers import camera, pages, surfaces, system, ws
+from ecomap_web.services import surfaces as surface_service
 from ecomap_web.state import AppState
 
 log = logging.getLogger(__name__)
@@ -64,6 +65,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await bus.send(op("pattern", name=state.pattern))
             if state.camera_source:
                 await bus.send(op(OP_CAMERA, source=state.camera_source))
+            # La escena completa: el render no abre la base, asi que todo lo que
+            # necesita para dibujar se lo manda el web al (re)conectar.
+            await surface_service.push_escena(bus, conn)
 
         bus.on_connect = on_connect
         await bus.start()
@@ -93,6 +97,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(pages.router)
     app.include_router(system.router)
     app.include_router(camera.router)
+    app.include_router(surfaces.router)
     app.include_router(ws.router)
     return app
 

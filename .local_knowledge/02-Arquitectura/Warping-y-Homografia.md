@@ -23,6 +23,18 @@ render, con N=M=1 cuando la superficie es un quad plano.
 
 Costo: N×M vértices, despreciable. La malla vive en un VBO que se re-sube solo cuando cambia la calibración, no por frame.
 
+## Corrección de perspectiva, en la práctica
+
+Cada celda calcula sus pesos `q` en el punto donde se cruzan sus diagonales; se pasan `uv * q` y `q`
+como atributo, y el fragment divide. Un vértice compartido entre celdas toma el promedio de las que
+lo tocan: así alcanza un solo VBO en vez de duplicar vértices por celda.
+
+**Limitación conocida.** Al subdividir un quad en perspectiva, los puntos interiores se interpolan
+en el espacio de pantalla, no siguiendo la proyección. El resultado es una malla que aproxima la
+perspectiva por tramos y se nota una leve curvatura en el centro con subdivisiones medias. Se
+corrige ajustando los puntos a mano, que es para lo que está la malla, o más adelante sembrando los
+puntos con la homografía cuando la superficie viene de un 1×1.
+
 ## Orden de operaciones
 
 ```

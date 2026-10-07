@@ -21,6 +21,7 @@ from ecomap_core.protocol import (
     OP_CAMERA,
     OP_PATTERN,
     OP_PING,
+    OP_SCENE,
     ev,
 )
 from ecomap_core.settings import Settings, load_settings
@@ -65,7 +66,7 @@ class RenderApp:
         self.bus.start()
         self.presenter = create_presenter(self.settings)
         try:
-            self.pipeline = Pipeline(self.presenter.ctx)
+            self.pipeline = Pipeline(self.presenter.ctx, self.presenter.size)
         except ShaderError as exc:
             # Un shader que no compila no debe tumbar el proceso: se avisa y se
             # proyecta negro hasta que llegue uno bueno.
@@ -104,6 +105,8 @@ class RenderApp:
             log.info("patron: %s", name)
         elif operation == OP_CAMERA:
             self._select_camera(str(message.get("source", "")))
+        elif operation == OP_SCENE:
+            self._apply_scene(message.get("scene") or {})
         else:
             log.debug("operacion ignorada en el Hito 0: %s", operation)
 
@@ -157,6 +160,21 @@ class RenderApp:
                 # No se llego al presupuesto: se resincroniza para no acumular
                 # deuda y entrar en espiral.
                 next_frame = time.perf_counter()
+
+    # --- escena ---
+
+    def _apply_scene(self, scene: dict[str, Any]) -> None:
+        """Reconstruye la geometria de las superficies.
+
+        Llega entera, no por diferencias: es poca data, se manda en cada cambio
+        y al reconectar, y evita que el render tenga que razonar sobre el orden
+        de los mensajes.
+        """
+        if self.pipeline is None:
+            return
+        surfaces = scene.get("surfaces") or []
+        self.pipeline.set_surfaces(surfaces)
+        self.scene_id = scene.get("calibration_version")
 
     # --- camara ---
 
