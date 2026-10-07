@@ -1,0 +1,94 @@
+# Raspberry Pi 4 / 5 (arm64). Salida HDMI directa, sin escritorio.
+#
+# Requisitos del host (ver .local_knowledge/04-Hardware/Raspberry-Pi-Setup.md):
+#   - Raspberry Pi OS Bookworm 64-bit Lite
+#   - dtoverlay=vc4-kms-v3d en /boot/firmware/config.txt
+#   - el usuario del servicio en los grupos video y render
+#   - NetworkManager y avahi-daemon para el Hito 3
+#
+# La imagen arm64 se construye EN la Pi (nativo) o en CI: desde Windows no se
+# puede, WSL2 no permite usar binfmt_misc. Ver ADR-012.
+#
+#   podman-compose -f compose.pi.yml up -d
+
+x-prod: &prod
+  build:
+    context: .
+    target: runtime
+  image: ecomap:latest
+  platform: linux/arm64
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  render:
+    <<: *prod
+    command: ecomap-render
+    environment:
+      ECOMAP_BUS: /run/ecomap/bus.sock
+      ECOMAP_EFFECTS: /effects
+      ECOMAP_MEDIA: /media
+      ECOMAP_RENDER_MODE: kms
+      ECOMAP_WIDTH: "1920"
+      ECOMAP_HEIGHT: "1080"
+      # 60 es el objetivo; el V3D de la Pi 4 puede no sostenerlo con efectos
+      # caros. La degradacion automatica (US-30) baja la resolucion de los FBO,
+      # nunca la de salida, para no romper la calibracion visual.
+      ECOMAP_FPS: "60"
+      ECOMAP_PREVIEW_PORT: "8001"
+      # Hito 4: v4l2:///dev/video0
+      ECOMAP_CAMERA: "fake://"
+    devices:
+      # GPU VideoCore (driver v3d). Requiere vc4-kms-v3d en config.txt.
+      - /dev/dri:/dev/dri
+      # Webcam por ruta estable (Hito 4). Ojo con el bus USB 2.0 compartido:
+      # conviene no colgarla del mismo controlador que un SSD USB.
+      # - /dev/v4l/by-id/usb-XXXX-video-index0:/dev/video0
+    # Modo rootful (ADR-014): el contenedor corre como root, asi que los grupos
+    # se listan normalmente. Si algun dia se vuelve a rootless, esto tiene que
+    # ser `group_add: [keep-groups]`: en un user namespace, listar los grupos
+    # agrega grupos locales y el device queda inaccesible.
+    group_add:
+      - video
+      - render
+    volumes:
+      - ecomap-effects:/effects:ro
+      - ecomap-media:/media:ro
+      - ecomap-bus:/run/ecomap
+
+  web:
+    <<: *prod
+    command: ecomap-web
+    depends_on:
+      - render
+    network_mode: host
+    environment:
+      ECOMAP_DB: /data/ecomap.db
+      ECOMAP_BUS: /run/ecomap/bus.sock
+      ECOMAP_EFFECTS: /effects
+      ECOMAP_MEDIA: /media
+    volumes:
+      - ecomap-data:/data
+      - ecomap-effects:/effects
+      - ecomap-media:/media
+      - ecomap-bus:/run/ecomap
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  # En la Pi estos volumenes viven en la SD o en el SSD USB. Las escrituras de
+  # la app estan acotadas por el debounce de 500 ms (ADR-004) justamente por
+  # el desgaste de la tarjeta.
+  ecomap-data:
+  ecomap-effects:
+  ecomap-media:
+  ecomap-bus:

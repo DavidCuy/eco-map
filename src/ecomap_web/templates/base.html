@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Eco-Map{% endblock %}</title>
+  <link rel="stylesheet" href="/static/vendor/pico.min.css">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/vendor/htmx.min.js"></script>
+  <script src="/static/vendor/htmx-ext-json-enc.js"></script>
+  <script src="/static/vendor/alpine.min.js" defer></script>
+</head>
+<body>
+  <main class="container">
+    <nav>
+      <ul><li><strong>Eco-Map</strong></li></ul>
+      <ul>
+        <li><a href="/" class="secondary">Dashboard</a></li>
+        <li><a href="/docs" class="secondary">API</a></li>
+      </ul>
+    </nav>
+    {% block content %}{% endblock %}
+    <footer>
+      <small>v{{ status.version }} · modo render <code>{{ status.mode }}</code></small>
+    </footer>
+  </main>
+</body>
+</html>

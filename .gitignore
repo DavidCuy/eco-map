@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+.local_knowledge/*data/
+.env
+
+# Windows: algunos binarios nativos crean este archivo al redirigir a /dev/null
+NUL

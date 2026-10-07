@@ -1,0 +1,122 @@
+"""Aplicacion FastAPI de Eco-Map.
+
+Un solo worker de Uvicorn: el estado en memoria (conexion al bus, telemetria,
+clientes WebSocket) vive en el proceso. Ver ADR-001.
+"""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as pkg_version
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+
+from ecomap_core.protocol import OP_CAMERA, OP_PING, op
+from ecomap_core.settings import Settings, load_settings
+from ecomap_web import migrate
+from ecomap_web.bus import BusClient
+from ecomap_web.db import connect, get_setting
+from ecomap_web.routers import camera, pages, system, ws
+from ecomap_web.state import AppState
+
+log = logging.getLogger(__name__)
+
+PACKAGE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = PACKAGE_DIR / "static"
+
+
+def _version() -> str:
+    try:
+        return pkg_version("ecomap")
+    except PackageNotFoundError:
+        return "0.0.0+dev"
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    settings = settings or load_settings()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        applied = migrate.run(settings)
+        if applied:
+            log.info("migraciones aplicadas: %s", applied)
+
+        conn = connect(settings.db)
+        state = AppState()
+        state.blackout = get_setting(conn, "blackout", "0") == "1"
+        state.pattern = get_setting(conn, "test_pattern", "off")  # type: ignore[assignment]
+        state.camera_source = get_setting(conn, "camera", settings.camera)
+
+        bus = BusClient(settings.bus_address())
+        bus.subscribe(state.handle_event)
+
+        async def on_connect() -> None:
+            # Al (re)conectar se reenvia el estado que el render no conoce.
+            # En el Hito 0 alcanza con ping + blackout + patron; la escena
+            # completa entra con US-13.
+            await bus.send(op(OP_PING))
+            await bus.send(op("blackout", on=state.blackout))
+            await bus.send(op("pattern", name=state.pattern))
+            if state.camera_source:
+                await bus.send(op(OP_CAMERA, source=state.camera_source))
+
+        bus.on_connect = on_connect
+        await bus.start()
+
+        app.state.settings = settings
+        app.state.db = conn
+        app.state.bus = bus
+        app.state.app_state = state
+        app.state.version = _version()
+        log.info("web listo en http://%s:%s", settings.host, settings.port)
+        try:
+            yield
+        finally:
+            await bus.stop()
+            conn.close()
+
+    app = FastAPI(
+        title="Eco-Map",
+        version=_version(),
+        summary="Videomapping con proyector, Raspberry Pi y camara",
+        lifespan=lifespan,
+    )
+
+    if STATIC_DIR.is_dir():
+        app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+    app.include_router(pages.router)
+    app.include_router(system.router)
+    app.include_router(camera.router)
+    app.include_router(ws.router)
+    return app
+
+
+app = create_app
+
+
+def run() -> None:
+    """Entry point `ecomap-web`."""
+    import uvicorn
+
+    settings = load_settings()
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    uvicorn.run(
+        "ecomap_web.main:create_app",
+        factory=True,
+        host=settings.host,
+        port=settings.port,
+        reload=settings.reload,
+        reload_dirs=["src"] if settings.reload else None,
+        workers=1,
+        log_level="info",
+    )
+
+
+if __name__ == "__main__":
+    run()
