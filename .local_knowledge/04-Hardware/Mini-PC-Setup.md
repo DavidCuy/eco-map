@@ -44,6 +44,27 @@ ls -l /dev/dri/            # debe existir card0 y renderD128
 sudo apt install -y mesa-utils && glxinfo -B | grep -E 'OpenGL (renderer|version)'
 ```
 
+## Rootless o root
+
+Rootless alcanza, con dos condiciones:
+
+1. El usuario del servicio pertenece a `video` y `render`, **y volvió a iniciar sesión** después
+   del `usermod`: `keep-groups` pasa los grupos que el proceso ya tiene, no los busca de nuevo.
+2. El compose usa `group_add: [keep-groups]`, no la lista de grupos. Ver
+   [[ADR-012-Podman-Desarrollo-Local]].
+
+```bash
+id                          # deben aparecer video y render
+ls -l /dev/dri/card0        # en Debian: root:video 0660
+podman info --format '{{.Host.Security.Rootless}} {{.Host.OCIRuntime.Name}}'   # true crun
+```
+
+El otro requisito es que **nada más tenga el DRM master**: sin servidor X ni Wayland corriendo, el
+contenedor lo toma sin privilegios. Por eso el host va sin entorno gráfico.
+
+Lo que sí puede necesitar root más adelante es la configuración de wifi del Hito 3: polkit deniega
+por defecto que un usuario sin privilegios controle NetworkManager.
+
 ## Diferencias frente a la Raspberry Pi
 
 | | Mini PC | Raspberry Pi |

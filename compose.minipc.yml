@@ -43,9 +43,14 @@ services:
       # Webcam por ruta estable: el indice /dev/videoN cambia entre arranques.
       # Descomentar con el id real de `ls -l /dev/v4l/by-id/` (Hito 4).
       # - /dev/v4l/by-id/usb-XXXX-video-index0:/dev/video0
+    # En rootless, listar los grupos (video, render) NO sirve: agrega grupos
+    # locales al user namespace y el device sigue inaccesible. keep-groups le
+    # dice a crun que no llame a setgroups, asi el proceso conserva los grupos
+    # del usuario que lanzo el contenedor. Requiere crun y es exclusivo: no se
+    # puede combinar con otros grupos. Con Docker (root) cambiar por
+    # [video, render].
     group_add:
-      - video
-      - render
+      - keep-groups
     volumes:
       - ecomap-effects:/effects:ro
       - ecomap-media:/media:ro

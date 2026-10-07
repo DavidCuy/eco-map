@@ -45,6 +45,8 @@ Verificado con Podman 6.0.2 rootless sobre WSL2: build de amd64, los dos servici
 | **SELinux** | En hosts Fedora/RHEL los bind mounts necesitan sufijo `:z` (compartido) o `:Z` (exclusivo), o el contenedor no puede leerlos. En WSL y Debian no hace falta. |
 | **Puertos bajo 1024** | Rootless no puede publicarlos sin ajustar `net.ipv4.ip_unprivileged_port_start`. Eco-Map usa 8000 y 8001, así que no aplica. |
 | **Devices en rootless** | Pasar `/dev/dri` requiere que el usuario tenga permiso real sobre el device (grupos `video` y `render`); rootless no puede conceder lo que el usuario no tiene. Es justamente lo que ya pide [[Raspberry-Pi-Setup]]. |
+| **`group_add` no funciona como se espera en rootless** | Listar `[video, render]` agrega grupos **locales al user namespace** y el device sigue inaccesible. Hay que usar `group_add: [keep-groups]`, que le dice a crun que no llame a `setgroups` y así el proceso conserva los grupos del usuario que lanzó el contenedor. Es exclusivo (no se combina con otros grupos) y solo existe con crun. Con Docker, que corre como root, vuelve a ser `[video, render]`. |
+| **polkit y NetworkManager** | El módulo de red ([[Modulo-Red]]) habla con NetworkManager por D-Bus. Montar el socket no alcanza: polkit deniega por defecto a un llamador que no sea root. Hace falta una regla de polkit que autorice al usuario del servicio, o correr ese contenedor como root. A resolver en US-16. |
 
 ## Alcance
 
