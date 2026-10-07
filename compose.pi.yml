@@ -42,6 +42,10 @@ services:
       ECOMAP_PREVIEW_PORT: "8001"
       # Hito 4: v4l2:///dev/video0
       ECOMAP_CAMERA: "fake://"
+    ports:
+      # Preview MJPEG: el canvas de calibracion lo muestra de fondo. El web
+      # corre en host network, asi que lo alcanza por localhost.
+      - "8001:8001"
     devices:
       # GPU VideoCore (driver v3d). Requiere vc4-kms-v3d en config.txt.
       - /dev/dri:/dev/dri

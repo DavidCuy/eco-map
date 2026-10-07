@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request, Response
 
-from ecomap_core.protocol import OP_BLACKOUT, OP_PATTERN, op
-from ecomap_core.schemas import BlackoutRequest, PatternRequest, SystemStatus
+from ecomap_core.protocol import OP_BLACKOUT, op
+from ecomap_core.schemas import BlackoutRequest, SystemStatus
 from ecomap_web.db import log_event, set_setting
 from ecomap_web.deps import BusDep, DbDep, StateDep, build_status
 from ecomap_web.routers.pages import render_fragment
@@ -43,25 +43,6 @@ async def set_blackout(
     set_setting(db, "blackout", "1" if payload.on else "0")
     if not delivered:
         log_event(db, "warn", "web", "blackout guardado pero el render no estaba conectado")
-    status = _status(request, bus, state)
-    if request.headers.get("HX-Request"):
-        return render_fragment(request, "partials/controls.html", {"status": status})
-    return status
-
-
-@router.post("/testpattern", response_model=SystemStatus)
-async def set_test_pattern(
-    payload: PatternRequest,
-    request: Request,
-    bus: BusDep,
-    state: StateDep,
-    db: DbDep,
-) -> Response | SystemStatus:
-    state.pattern = payload.pattern
-    delivered = await bus.send(op(OP_PATTERN, name=payload.pattern))
-    set_setting(db, "test_pattern", payload.pattern)
-    if not delivered:
-        log_event(db, "warn", "web", "patron guardado pero el render no estaba conectado")
     status = _status(request, bus, state)
     if request.headers.get("HX-Request"):
         return render_fragment(request, "partials/controls.html", {"status": status})

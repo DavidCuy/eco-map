@@ -16,12 +16,13 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from ecomap_core.protocol import OP_CAMERA, OP_PING, op
+from ecomap_core.protocol import OP_CAMERA, OP_EFFECT, OP_PING, op
 from ecomap_core.settings import Settings, load_settings
 from ecomap_web import migrate
 from ecomap_web.bus import BusClient
 from ecomap_web.db import connect, get_setting
-from ecomap_web.routers import camera, pages, system, ws
+from ecomap_web.routers import camera, effects, pages, surfaces, system, ws
+from ecomap_web.services import surfaces as surface_service
 from ecomap_web.state import AppState
 
 log = logging.getLogger(__name__)
@@ -49,7 +50,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         conn = connect(settings.db)
         state = AppState()
         state.blackout = get_setting(conn, "blackout", "0") == "1"
-        state.pattern = get_setting(conn, "test_pattern", "off")  # type: ignore[assignment]
+        state.effect = get_setting(conn, "active_effect", "grid_test")
         state.camera_source = get_setting(conn, "camera", settings.camera)
 
         bus = BusClient(settings.bus_address())
@@ -61,9 +62,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             # completa entra con US-13.
             await bus.send(op(OP_PING))
             await bus.send(op("blackout", on=state.blackout))
-            await bus.send(op("pattern", name=state.pattern))
+            if state.effect:
+                await bus.send(op(OP_EFFECT, id=state.effect, params=state.effect_params))
             if state.camera_source:
                 await bus.send(op(OP_CAMERA, source=state.camera_source))
+            # La escena completa: el render no abre la base, asi que todo lo que
+            # necesita para dibujar se lo manda el web al (re)conectar.
+            await surface_service.push_escena(bus, conn)
 
         bus.on_connect = on_connect
         await bus.start()
@@ -93,6 +98,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(pages.router)
     app.include_router(system.router)
     app.include_router(camera.router)
+    app.include_router(surfaces.router)
+    app.include_router(effects.router)
     app.include_router(ws.router)
     return app
 

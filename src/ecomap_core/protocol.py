@@ -19,10 +19,10 @@ OP_SCENE = "scene"
 OP_PARAM = "param"
 OP_POINTS = "points"
 OP_BLACKOUT = "blackout"
-OP_PATTERN = "pattern"
+OP_EFFECT = "effect"
 OP_CAMERA = "camera"
 
-OPS = frozenset({OP_PING, OP_SCENE, OP_PARAM, OP_POINTS, OP_BLACKOUT, OP_PATTERN, OP_CAMERA})
+OPS = frozenset({OP_PING, OP_SCENE, OP_PARAM, OP_POINTS, OP_BLACKOUT, OP_EFFECT, OP_CAMERA})
 
 # --- eventos (render -> web) ---
 EV_PONG = "pong"

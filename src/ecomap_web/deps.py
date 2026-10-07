@@ -53,7 +53,8 @@ def build_status(bus: BusClient, state: AppState, version: str) -> SystemStatus:
     return SystemStatus(
         render_up=render_up(bus, state),
         blackout=state.blackout,
-        pattern=state.pattern,
+        effect=state.effect,
+        effect_error=state.effect_error,
         fps=tele.fps,
         frame_ms=tele.frame_ms,
         frame_ms_max=tele.frame_ms_max,

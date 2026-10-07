@@ -1,5 +1,4 @@
-{# Fragmento intercambiado por HTMX tras cada accion. Tambien se renderiza
-   embebido en el dashboard en la primera carga. #}
+{# Controles del render. Fragmento intercambiado por HTMX tras cada acción. #}
 <div class="grid">
   <button
     class="{{ 'contrast' if status.blackout else 'secondary' }}"
@@ -10,19 +9,30 @@
     hx-swap="innerHTML">
     {{ 'Salir de blackout' if status.blackout else 'Blackout' }}
   </button>
-
-  {% for name, label in [('grid', 'Patron grilla'), ('white', 'Blanco'), ('off', 'Sin patron')] %}
-  <button
-    class="{{ 'primary' if status.pattern == name else 'outline secondary' }}"
-    hx-post="/api/system/testpattern"
-    hx-ext="json-enc"
-    hx-vals='{"pattern": "{{ name }}"}'
-    hx-target="#controls"
-    hx-swap="innerHTML">
-    {{ label }}
-  </button>
-  {% endfor %}
 </div>
+
+<form hx-post="/api/effects/active"
+      hx-ext="json-enc"
+      hx-target="#controls"
+      hx-swap="innerHTML">
+  <label for="effect-id">
+    Efecto
+    <select id="effect-id" name="id">
+      {% for effect in effects %}
+      <option value="{{ effect.id }}"
+              {{ 'selected' if effect.id == status.effect else '' }}
+              {{ 'disabled' if not effect.available else '' }}>
+        {{ effect.name }}{{ ' — no compila' if not effect.available else '' }}
+      </option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">Aplicar</button>
+</form>
+
+{% if status.effect_error %}
+<p><small class="muted">⚠ {{ status.effect_error }}</small></p>
+{% endif %}
 {% if not status.render_up %}
-<small class="muted">El render no esta conectado: el cambio queda guardado y se aplica al reconectar.</small>
+<small class="muted">El render no está conectado: el cambio queda guardado y se aplica al reconectar.</small>
 {% endif %}

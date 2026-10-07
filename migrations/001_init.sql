@@ -8,7 +8,7 @@ CREATE TABLE surface (
     kind        TEXT    NOT NULL DEFAULT 'quad' CHECK (kind IN ('quad', 'mesh')),
     mesh_cols   INTEGER NOT NULL DEFAULT 1,
     mesh_rows   INTEGER NOT NULL DEFAULT 1,
-    points      TEXT    NOT NULL,              -- JSON [[x,y],...] normalizado 0..1, TL TR BR BL
+    points      TEXT    NOT NULL,              -- JSON [[x,y],...] 0..1, fila-mayor (ADR-015)
     mask        TEXT,                          -- JSON poligono o NULL
     opacity     REAL    NOT NULL DEFAULT 1.0,
     enabled     INTEGER NOT NULL DEFAULT 1,

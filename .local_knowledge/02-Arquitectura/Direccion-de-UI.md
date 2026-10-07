@@ -41,8 +41,32 @@ Referencia visual: la app de videomapping del video analizado ([[ADR-015-Superfi
 
 La tarjeta de cámara y el log de eventos pasan a una pantalla aparte o a un panel plegable: no compiten con el canvas.
 
-## Cuándo
+## Reparto: HTMX en los paneles, Alpine en el workspace
 
-Entra con el **Hito 1**, junto con el canvas de calibración: rediseñar el dashboard antes de que exista el canvas sería pintar una pantalla que va a cambiar entera. Ver [[Roadmap]].
+El canvas necesita el estado de la malla **en el cliente** de todas formas: arrastre, nudge y zoom
+trabajan sobre los puntos sin ida y vuelta al servidor. Intercambiar HTML desde el servidor para esa
+parte dejaría dos copias del mismo estado desincronizándose, así que el workspace usa Alpine con
+`fetch` contra la API JSON.
+
+Los paneles que son solo formularios — efecto activo, blackout, cámara — siguen con HTMX, que para
+eso es más simple. La convención de doble representación ([[Modulo-Web-API]]) sigue valiendo para
+ellos.
+
+## Estado: implementado
+
+El rediseño entró con el Hito 1. Lo que quedó:
+
+- Barra de estado con fps, frame time y su pico, temperatura y estado del render, alimentada por
+  WebSocket.
+- Canvas con el preview del render de fondo y los handles encima, en dos capas: así no hay que leer
+  píxeles del stream, que ensuciaría el canvas por CORS.
+- Handles de malla arrastrables con punteros (sirve mouse y dedo), nudge con flechas de 1 px y 10 px
+  con Shift, definidos en **píxeles de la salida del proyector** y no de la pantalla.
+- Recuadro ampliado 4× de la esquina activa. Se calcula sobre el tamaño **mostrado** del preview, no
+  sobre la resolución de salida: la imagen va estirada al stage.
+- Tira de caras para saltar entre superficies de un toque.
+- Paneles plegables para efecto, cámara y eventos: no compiten con el canvas.
+
+Ver [[Roadmap]].
 
 Relacionado: [[Modulo-Web-API]] · [[Modulo-Calibracion]] · [[ADR-002-HTMX-Alpine]] · [[ADR-015-Superficie-por-Cara-y-Malla]]

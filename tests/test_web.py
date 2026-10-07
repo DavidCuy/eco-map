@@ -13,6 +13,7 @@ from ecomap_core.settings import Settings
 from ecomap_web.main import create_app
 
 MIGRATIONS = Path(__file__).resolve().parent.parent / "migrations"
+EFFECTS_DIR = Path(__file__).resolve().parent.parent / "effects"
 
 
 def _puerto_libre() -> int:
@@ -27,7 +28,7 @@ async def cliente(tmp_path: Path):
         db=tmp_path / "ecomap.db",
         migrations_dir=MIGRATIONS,
         bus=f"tcp://127.0.0.1:{_puerto_libre()}",  # nadie escucha: render offline
-        effects_dir=tmp_path / "effects",
+        effects_dir=EFFECTS_DIR,
         media_dir=tmp_path / "media",
     )
     app = create_app(settings)
@@ -45,7 +46,6 @@ async def test_status_reporta_render_offline(cliente):
     cuerpo = respuesta.json()
     assert cuerpo["render_up"] is False
     assert cuerpo["blackout"] is False
-    assert cuerpo["pattern"] == "off"
 
 
 async def test_dashboard_se_renderiza(cliente):
@@ -75,20 +75,14 @@ async def test_hx_request_devuelve_fragmento_html(cliente):
     client, _ = cliente
 
     respuesta = await client.post(
-        "/api/system/testpattern",
-        json={"pattern": "grid"},
+        "/api/system/blackout",
+        json={"on": True},
         headers={"HX-Request": "true"},
     )
 
     assert respuesta.status_code == 200
     assert respuesta.headers["content-type"].startswith("text/html")
     assert "hx-post" in respuesta.text
-
-
-async def test_patron_invalido_es_rechazado(cliente):
-    client, _ = cliente
-    respuesta = await client.post("/api/system/testpattern", json={"pattern": "arcoiris"})
-    assert respuesta.status_code == 422
 
 
 async def test_telemetria_del_bus_actualiza_el_estado(cliente):
@@ -101,3 +95,48 @@ async def test_telemetria_del_bus_actualiza_el_estado(cliente):
     assert cuerpo["temp"] == 54.1
     # El socket sigue caido, asi que el render no cuenta como vivo.
     assert cuerpo["render_up"] is False
+
+
+async def test_el_dashboard_es_el_workspace_de_calibracion(cliente):
+    """El dashboard dejo de ser una pila de tarjetas: ahora el canvas manda."""
+    client, _ = cliente
+    await client.post("/api/surfaces", json={"name": "frontal"})
+
+    html = (await client.get("/")).text
+
+    assert 'workspace(JSON.parse(' in html
+    assert "<canvas" in html
+    assert "/static/calibrate.js" in html
+    # La configuracion viaja como JSON embebido: la malla puede tener cientos
+    # de puntos y no entra en atributos sueltos.
+    assert '"surfaces"' in html and '"frontal"' in html
+    assert '"previewUrl"' in html and '"output"' in html
+
+
+async def test_el_dashboard_conserva_la_telemetria(cliente):
+    """Lo tecnico no se pierde con el rediseno: es lo que dice si el equipo
+    esta sufriendo, y ninguna app comercial lo muestra."""
+    client, _ = cliente
+
+    html = (await client.get("/")).text
+
+    for campo in ("fps", "frame_ms", "render_up", "temp"):
+        assert campo in html
+
+
+async def test_el_dashboard_funciona_sin_superficies(cliente):
+    client, _ = cliente
+    html = (await client.get("/")).text
+    assert '"surfaces": []' in html
+
+
+async def test_un_nombre_de_superficie_no_puede_inyectar_html(cliente):
+    """El JSON del workspace va dentro de un <script>: si un nombre pudiera
+    cerrar la etiqueta, seria inyeccion de codigo."""
+    client, _ = cliente
+    await client.post("/api/surfaces", json={"name": "</script><img src=x>"})
+
+    html = (await client.get("/")).text
+
+    assert "</script><img src=x>" not in html
+    assert "\u003c/script" in html
