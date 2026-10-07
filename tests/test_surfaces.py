@@ -14,6 +14,7 @@ from ecomap_core.settings import Settings
 from ecomap_web.main import create_app
 
 MIGRATIONS = Path(__file__).resolve().parent.parent / "migrations"
+EFFECTS_DIR = Path(__file__).resolve().parent.parent / "effects"
 
 
 def _puerto_libre() -> int:
@@ -29,7 +30,7 @@ async def cliente(tmp_path: Path):
         db=tmp_path / "ecomap.db",
         migrations_dir=MIGRATIONS,
         bus=f"tcp://127.0.0.1:{_puerto_libre()}",
-        effects_dir=tmp_path / "effects",
+        effects_dir=EFFECTS_DIR,
         media_dir=tmp_path / "media",
     )
     app = create_app(settings)
@@ -94,8 +95,9 @@ async def test_guardar_puntos_persiste_y_avisa_al_render(cliente):
     assert json.loads(fila["points"])[0] == [0.1, 0.1]
     escenas = [m for m in enviados if m.get("op") == "scene"]
     assert escenas, "cada cambio de calibracion debe empujar la escena al render"
-    primer_punto = escenas[-1]["scene"]["surfaces"][0]["points"][0]
-    assert list(primer_punto) == [0.1, 0.1]
+    # Los puntos llegan al render dentro de la capa que usa la superficie
+    # (US-13): una superficie sola no significa nada para el render. Eso se
+    # verifica en test_scenes.py.
 
 
 async def test_guardar_puntos_rechaza_cantidad_incorrecta(cliente):
@@ -145,14 +147,14 @@ async def test_resetear_vuelve_a_pantalla_completa_sin_perder_la_subdivision(cli
     assert (cuerpo["mesh_cols"], cuerpo["mesh_rows"]) == (2, 2)
 
 
-async def test_desactivar_una_cara_la_saca_de_la_escena(cliente):
+async def test_desactivar_una_cara_empuja_la_escena(cliente):
     client, _, enviados = cliente
     surface_id = (await client.post("/api/surfaces", json={"name": "cara"})).json()["id"]
 
     await client.patch(f"/api/surfaces/{surface_id}", json={"enabled": False})
 
     escena = [m for m in enviados if m.get("op") == "scene"][-1]["scene"]
-    assert escena["surfaces"] == []
+    assert escena["layers"] == []
 
 
 async def test_borrar_superficie(cliente):

@@ -167,3 +167,59 @@ class SurfaceOut(BaseModel):
     opacity: float
     enabled: bool
     updated_at: str
+
+
+# --- escenas y capas -----------------------------------------------------
+
+BlendMode = Literal["normal", "add", "multiply", "screen"]
+
+
+class SceneCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+class SceneUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+
+
+class LayerCreate(BaseModel):
+    surface_id: int
+    effect_id: str = Field(min_length=1, max_length=64)
+    blend_mode: BlendMode = "normal"
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class LayerUpdate(BaseModel):
+    """PATCH: lo que no viene, no se toca."""
+
+    blend_mode: BlendMode | None = None
+    enabled: bool | None = None
+    params: dict[str, Any] | None = None
+
+
+class LayerOut(BaseModel):
+    id: int
+    scene_id: int
+    surface_id: int
+    surface_name: str
+    effect_id: str
+    effect_name: str
+    effect_available: bool
+    z_order: int
+    blend_mode: BlendMode
+    params: dict[str, Any]
+    enabled: bool
+
+
+class SceneOut(BaseModel):
+    id: int
+    name: str
+    is_default: bool
+    is_active: bool
+    layers: list[LayerOut] = []
+
+
+class ReorderIn(BaseModel):
+    """Ids de capa en el orden deseado, de abajo hacia arriba."""
+
+    layer_ids: list[int] = Field(min_length=1)

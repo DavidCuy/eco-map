@@ -45,6 +45,7 @@ def dashboard(
     from ecomap_web.routers.camera import devices_out
     from ecomap_web.routers.effects import catalogo, valores_efectivos
     from ecomap_web.services import effects as effect_service
+    from ecomap_web.services import scenes as scene_service
     from ecomap_web.services import surfaces as surface_service
 
     status = build_status(bus, state, request.app.state.version)
@@ -69,6 +70,8 @@ def dashboard(
             "selected": state.camera_source or settings.camera,
             "camera": state.camera,
             "effects": catalogo(db, state),
+            "scenes": scene_service.listar(db),
+            "surfaces": surface_service.listar(db),
             "active_effect": effect_service.obtener(db, state.effect) if state.effect else None,
             "values": valores_efectivos(
                 effect_service.obtener(db, state.effect) if state.effect else None,

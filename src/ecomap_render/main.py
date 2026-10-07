@@ -187,7 +187,7 @@ class RenderApp:
         """
         if self.pipeline is None:
             return
-        error = self.pipeline.set_effect(effect_id, params)
+        error = self.pipeline.set_fallback_effect(effect_id, params)
         if error:
             self.bus.publish(
                 ev(EV_ERROR, source="effect", level="error", msg=f"{effect_id}: {error}")
@@ -206,9 +206,8 @@ class RenderApp:
         """
         if self.pipeline is None:
             return
-        surfaces = scene.get("surfaces") or []
-        self.pipeline.set_surfaces(surfaces)
-        self.scene_id = scene.get("calibration_version")
+        self.pipeline.set_scene(scene)
+        self.scene_id = scene.get("scene_id")
 
     # --- camara ---
 

@@ -25,6 +25,27 @@ while running:
     telemetry.tick()           # fps, frame time, temp cada 1 s
 ```
 
+## Capas y FBO
+
+Desde US-13 el render dibuja **capas**, no superficies: cada capa es un efecto sobre una superficie,
+con su blend. Dos pasos por capa:
+
+1. El efecto se dibuja en **su** FBO, en UV 0..1, sin saber nada del warp.
+2. Ese FBO se dibuja sobre la malla de la superficie, con el blend de la capa.
+
+El FBO de cada capa se dimensiona al **bounding box de su superficie**, no a la resolución de
+salida: una cara chica no paga 1080p. Medido en el stack de desarrollo, dos capas sobre caras de
+medio ancho usan FBO de 240×224 y 240×208 en vez de 640×360 cada una.
+
+Los blends usan **alfa premultiplicado**: el shader de warp ya multiplica el color por la opacidad,
+así que los cuatro modos se definen con la misma convención en vez de una fórmula por modo.
+
+La geometría de la superficie viaja **dentro** de cada capa. El render no tiene índice de
+superficies ni le sirve tenerlo: con un solo mensaje puede redibujar todo.
+
+Lo que no se dibuja no llega: el web filtra capas deshabilitadas, superficies deshabilitadas y
+efectos no disponibles. El render recibe lo que se dibuja, no un estado sobre el que razonar.
+
 ## Estado en memoria
 
 El render mantiene un `Scene` inmutable-por-frame. Las ops del bus se aplican **entre frames**, nunca a mitad de dibujo. Un `reload` completo re-lee la escena desde... el web, que se la manda serializada por el socket; el render **no abre SQLite**. Así hay una sola fuente de verdad de lectura y cero locks.

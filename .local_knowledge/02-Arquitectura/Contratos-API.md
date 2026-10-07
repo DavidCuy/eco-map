@@ -64,18 +64,36 @@ de verdad es quien ejecuta.
 
 ## Escenas y capas
 
-```
-GET    /api/scenes
-POST   /api/scenes                   {name}
-POST   /api/scenes/{id}/activate     # cambia lo que se proyecta AHORA
-POST   /api/scenes/{id}/default      # escena de arranque
-POST   /api/scenes/{id}/duplicate
+Una **capa** es efecto + superficie, con orden, blend y parámetros. Una **escena** es un conjunto de
+capas activable de un golpe.
 
-POST   /api/scenes/{id}/layers       {surface_id, effect_id, z_order?, blend_mode?}
-PATCH  /api/layers/{id}              {z_order?, blend_mode?, enabled?}
-PUT    /api/layers/{id}/params       {speed: 0.7, color_a: "#00ffc8"}   # merge parcial
-DELETE /api/layers/{id}
 ```
+GET    /api/scenes                   [{id, name, is_default, is_active, layers}]
+POST   /api/scenes                   {name}            -> 201
+PATCH  /api/scenes/{id}              {name}
+POST   /api/scenes/{id}/activate     # cambia lo que se proyecta AHORA
+POST   /api/scenes/{id}/default      # escena de arranque; no cambia lo actual
+POST   /api/scenes/{id}/duplicate    # copia las capas
+DELETE /api/scenes/{id}              -> 204
+
+POST   /api/scenes/{id}/layers       {surface_id, effect_id, blend_mode?, params?}
+PATCH  /api/layers/{id}              {blend_mode?, enabled?, params?}   # merge parcial
+POST   /api/layers/{id}/move?direction=up|down
+PUT    /api/scenes/{id}/layers/order {layer_ids: [...]}   # orden completo
+DELETE /api/layers/{id}              -> 204
+```
+
+`z_order` **no se elige**: sale del orden de creación y se cambia moviendo o reordenando. Un
+reordenamiento parcial se rechaza con 422: dejaría capas con `z` duplicado y el apilado pasaría a
+depender del id, que no es lo que el usuario ve.
+
+Existen las dos formas de reordenar a propósito. `move` es lo que necesita la UI — calcular la lista
+entera en la plantilla para mover un elemento es ilegible —, y `order` es para arrastrar y soltar.
+
+Blend: `normal`, `add`, `multiply`, `screen`. **Ojo con `multiply`**: sobre fondo negro el resultado
+es negro, así que una capa en multiply solo se ve donde se superpone con otra.
+
+Tope de capas en `setting.max_layers`, 4 por defecto. Superarlo devuelve 422 con el motivo.
 
 ## Sistema y calibración
 
@@ -130,8 +148,12 @@ Servidor → cliente, 2 Hz:
 {"op":"camera",  "source": "v4l2:///dev/v4l/by-id/usb-XXXX-video-index0"}
 {"op":"effect",  "id": "grid_test", "params": {"cells": 24}}
 {"op":"effects_reload"}
-{"op":"scene",   "scene": {"calibration_version": 7, "surfaces": [
-                   {"id": 1, "cols": 1, "rows": 1, "points": [[0.3,0.2], ...], "opacity": 1.0}]}}
+{"op":"scene",   "scene": {
+                   "scene_id": 3, "calibration_version": 7,
+                   "fallback_effect": "grid_test", "fallback_params": {},
+                   "layers": [{"id": 5, "effect": "plasma", "params": {}, "blend": "add",
+                               "surface": {"id": 1, "cols": 1, "rows": 1,
+                                           "points": [[0.3,0.2], ...], "opacity": 1.0}}]}}
 {"op":"ping"}
 ```
 Render → web:

@@ -203,3 +203,31 @@
 .catalog .tags { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0 0 0.4rem; font-size: 0.75rem; }
 .catalog button { margin: 0; padding: 0.3rem 0.6rem; font-size: 0.85rem; }
 .card-off { opacity: 0.55; }
+
+/* --- escenas y capas --- */
+
+.scenes { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.scene {
+  margin: 0;
+  padding: 0.5rem 0.7rem;
+  background: var(--pico-background-color);
+  border-radius: var(--pico-border-radius);
+  border: 1px solid transparent;
+}
+
+.scene-active { border-color: var(--ecomap-accent); }
+.scene header { display: flex; gap: 0.5rem; align-items: baseline; margin-bottom: 0.3rem; }
+
+.layers { list-style: none; padding-left: 0; margin: 0 0 0.4rem; font-size: 0.85rem; }
+.layers li { display: flex; gap: 0.4rem; align-items: center; padding: 0.2rem 0; flex-wrap: wrap; }
+.layers li > span:first-child { flex: 1; }
+
+.scene .acciones { display: flex; gap: 0.25rem; flex-wrap: wrap; }
+.scene .acciones button { margin: 0; padding: 0.2rem 0.5rem; font-size: 0.8rem; width: auto; }
+
+.nueva-capa, .nueva-escena { display: flex; gap: 0.3rem; flex-wrap: wrap; margin: 0.3rem 0; }
+.nueva-capa select, .nueva-capa button,
+.nueva-escena input, .nueva-escena button {
+  margin: 0; width: auto; flex: 1 1 auto; font-size: 0.85rem; padding: 0.3rem 0.5rem;
+}
