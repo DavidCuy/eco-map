@@ -234,3 +234,11 @@
 
 /* El valor del slider se actualiza mientras se arrastra, sin ir al servidor. */
 .param [data-param-valor] { font-variant-numeric: tabular-nums; }
+
+.aviso {
+  margin: 0;
+  padding: 0.5rem 0.8rem;
+  border-radius: var(--pico-border-radius);
+  background: color-mix(in srgb, var(--ecomap-accent) 18%, transparent);
+  font-size: 0.9rem;
+}

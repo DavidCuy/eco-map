@@ -166,9 +166,7 @@ async def _aplicar(bus, db, state, writer) -> None:
     entregado = await bus.send(op(OP_EFFECT, id=state.effect, params=state.effect_params))
 
     writer.schedule("active_effect", lambda: set_setting(db, "active_effect", efecto))
-    writer.schedule(
-        "active_effect_params", lambda: set_setting(db, "active_effect_params", params)
-    )
+    writer.schedule("active_effect_params", lambda: set_setting(db, "active_effect_params", params))
 
     if not entregado:
         log_event(db, "warn", "web", "efecto guardado pero el render no estaba conectado")

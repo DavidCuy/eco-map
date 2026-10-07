@@ -209,6 +209,7 @@ async def test_activar_efecto_avisa_al_render_al_instante_y_al_disco_despues(cli
     assert respuesta.status_code == 200
     assert app.state.app_state.effect == "solid"
     assert [m for m in enviados if m.get("op") == "effect"][-1]["id"] == "solid"
+
     # En disco sigue el valor anterior: la escritura todavia no salio
     def guardado() -> str:
         return app.state.db.execute(

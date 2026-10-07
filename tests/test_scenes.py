@@ -371,3 +371,30 @@ async def test_el_efecto_de_fallback_viaja_por_dos_caminos(cliente):
     assert escena["layers"] == []
     assert escena["fallback_effect"] == "grid_test"
     assert escena["fallback_params"] == {"cells": 8}
+
+
+async def test_la_ui_avisa_cuando_proyecta_a_pantalla_completa(cliente):
+    """El fallback es intencional, pero con caras calibradas y sin capas es
+    indistinguible de que el warp este roto. Paso de verdad durante el
+    desarrollo: hay que decirlo, no dejarlo adivinar."""
+    client, _, _ = cliente
+    await client.post("/api/surfaces", json={"name": "frontal"})
+    scene_id = (await client.post("/api/scenes", json={"name": "principal"})).json()["id"]
+
+    html = (await client.get("/")).text
+    assert "ninguna capa las usa" in html
+
+    caras = (await client.get("/api/surfaces")).json()
+    await client.post(
+        f"/api/scenes/{scene_id}/layers",
+        json={"surface_id": caras[0]["id"], "effect_id": "solid"},
+    )
+
+    html = (await client.get("/")).text
+    assert "ninguna capa las usa" not in html
+
+
+async def test_sin_caras_no_hay_aviso(cliente):
+    """Sin nada calibrado, pantalla completa es exactamente lo que se espera."""
+    client, _, _ = cliente
+    assert "ninguna capa las usa" not in (await client.get("/")).text

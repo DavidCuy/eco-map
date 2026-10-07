@@ -103,9 +103,7 @@ async def activar(
 
 
 @router.post("/api/scenes/{scene_id}/default", response_model=SceneOut)
-def marcar_default(
-    scene_id: int, request: Request, db: DbDep, state: StateDep
-) -> dict | Response:
+def marcar_default(scene_id: int, request: Request, db: DbDep, state: StateDep) -> dict | Response:
     """La escena de arranque. No cambia lo que se proyecta ahora."""
     try:
         return _salida(request, db, state, service.marcar_default(db, scene_id))
@@ -114,9 +112,7 @@ def marcar_default(
 
 
 @router.post("/api/scenes/{scene_id}/duplicate", response_model=SceneOut, status_code=201)
-def duplicar(
-    scene_id: int, request: Request, db: DbDep, state: StateDep
-) -> dict | Response:
+def duplicar(scene_id: int, request: Request, db: DbDep, state: StateDep) -> dict | Response:
     try:
         return _salida(request, db, state, service.duplicar(db, scene_id))
     except service.SceneNotFound as exc:
