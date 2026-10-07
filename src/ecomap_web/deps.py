@@ -73,4 +73,5 @@ def build_status(bus: BusClient, state: AppState, version: str) -> SystemStatus:
         scene_id=tele.scene_id,
         mode=tele.mode,
         version=version,
+        camera_state=state.camera.state,
     )

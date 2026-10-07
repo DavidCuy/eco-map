@@ -32,13 +32,58 @@ N×M configurable (1×1, 3×3, 5×5, 9×9). Al subir la resolución los puntos i
 con Catmull-Rom y después se editan a mano. Bajarla descarta ajustes y debe avisar.
 Ver [[Warping-y-Homografia]].
 
-## Asistida por cámara
+## Asistida por cámara (implementada)
 
-Secuencia de auto-calibración, detalle en [[Modulo-Camara-Feedback]]:
-1. Proyectar blanco → capturar → detectar el área iluminada (contorno).
-2. Proyectar Gray code (h + v, ~20 frames) → mapa píxel-cámara → píxel-proyector.
-3. Resolver homografía cámara↔proyector (`cv2.findHomography`, RANSAC).
-4. El usuario dibuja la superficie **sobre la imagen de la cámara** (más intuitivo que sobre el proyector) y el sistema la transforma a coordenadas de proyector.
+La corre el **render**, que es el único proceso con proyector y cámara. El web la dispara
+(`POST /api/calibration/auto` → 202), sigue el progreso por el WebSocket y guarda el resultado en la
+tabla `calibration`. Es asíncrona a propósito: son decenas de patrones y varios segundos, y un POST
+que esperara daría timeout justo cuando va bien.
+
+Secuencia (`src/ecomap_vision/graycode.py`, `src/ecomap_render/calibration.py`):
+
+1. **Blanco y negro de referencia.** Sin ellos habría que elegir un umbral de brillo absoluto, que
+   no funciona igual en una pared blanca que en madera. Un píxel entra solo si el contraste
+   blanco−negro supera `min_contrast`; eso es lo que separa el área proyectada del fondo de la sala.
+2. **Gray code en x y en y, cada patrón con su inverso.** Un píxel es 1 si se ve más claro en el
+   patrón que en su inverso — comparación relativa, sin umbral. Gray y no binario común porque entre
+   dos valores consecutivos cambia un solo bit: un píxel en el borde de una franja cae en la columna
+   vecina, no al otro extremo de la pantalla.
+3. **Correspondencias** cámara→proyector, submuestreadas (`step`).
+4. `cv2.findHomography` con RANSAC → `H`, error RMS de reproyección e inliers.
+
+El usuario después dibuja la superficie **sobre la imagen de la cámara** y la UI la transforma a
+coordenadas de proyector con `H⁻¹`. Los puntos se guardan **siempre** en coordenadas de proyector:
+es lo único que el render entiende. La vista de cámara solo cambia cómo se dibujan y cómo se
+interpreta el arrastre.
+
+### Dos relojes que no coinciden
+
+El render dibuja a 30 o 60 fps; la cámara captura a 15, con su buffer de driver y su latencia USB.
+Por eso **no se cuentan frames de render** para esperar: se espera a que avance el *número de
+secuencia de la cámara*, que es la única señal de que llegó un frame nuevo de verdad. Cuántos hace
+falta descartar tras cambiar el patrón es el parámetro `settle`, y su valor justo depende del
+hardware ([[Limitaciones-por-Hardware]]).
+
+### El pliegue del Gray code
+
+Con menos bits que los que pide el ancho hay que **agrupar píxeles en bloques** (`2**shift`), no
+truncar el código. Un Gray *reflejado* al que le faltan los bits altos se pliega sobre sí mismo: el
+decodificador devuelve una columna espejada, y como el espejo es consistente para toda una franja de
+la imagen, RANSAC la acepta como respuesta válida.
+
+Así se veía el bug: `rms = 0.69 px`, 283 inliers — y la homografía invertida, con las esquinas a
+1093 px de la verdad. **Un error de reproyección bajo no prueba que la calibración sea correcta**,
+solo que es internamente consistente. Lo encontró el [[Banco-Virtual-Proyector-Camara]], que es el
+único que puede comparar contra la respuesta conocida.
+
+Con bloques: 640 columnas con 8 bits son bloques de 4 px, precisión de sobra para una homografía, y
+las franjas finas de 4 px sobreviven mejor a una cámara mediocre que las de 1 px.
+
+### Se decodifica el frame completo
+
+El hilo de visión reduce a 320×240 para detectar movimiento; la calibración usa el frame **sin
+reducir**. Un `resize` con `INTER_AREA` promedia los bordes de las franjas finas, que es exactamente
+lo que arruina la decodificación. Son ~34 frames una sola vez, no por cuadro.
 
 ## Máscaras (opcional, post-v1)
 
@@ -56,4 +101,4 @@ acabado para la instalación final, no un requisito de v1 ([[ADR-015-Superficie-
 - Cada edición guarda `updated_at`; la escena mantiene un `calibration_version` para invalidar cachés de matriz en el render.
 - Exportar/importar calibración como JSON (respaldo antes de tocar el proyector).
 
-Relacionado: [[Modulo-Render]] · [[Modelo-de-Datos]] · [[Casos-de-Uso]]
+Relacionado: [[Modulo-Render]] · [[Modelo-de-Datos]] · [[Casos-de-Uso]] · [[Banco-Virtual-Proyector-Camara]]

@@ -60,6 +60,13 @@ class Settings(BaseSettings):
     # --- camara (se usa a partir del Hito 4) ---
     camera: str = "fake://"
 
+    # --- calibracion ---
+    # Error de reproyeccion, en pixeles de camara, a partir del cual la UI
+    # desconfia de la homografia y ofrece calibrar a mano. Es configurable
+    # porque el valor util depende de la resolucion de la camara y de cuan
+    # exigente sea el montaje.
+    calibration_rms_warn: float = Field(default=2.0, gt=0)
+
     # --- telemetria ---
     telemetry_hz: float = Field(default=2.0, gt=0)
 

@@ -53,6 +53,10 @@ class SystemStatus(BaseModel):
     version: str
     effect: str | None = None
     effect_error: str | None = None
+    # Lo reporta el render, no el web: la UI necesita saber en vivo si hay
+    # camara para habilitar la auto-calibracion, y el panel de camara se
+    # recarga por htmx aparte.
+    camera_state: str = "closed"
 
 
 class BlackoutRequest(BaseModel):
@@ -147,6 +151,32 @@ class MotionSettings(BaseModel):
     dead_band: float = Field(default=0.02, ge=0.0, le=0.5)
     smoothing: float = Field(default=0.25, gt=0.0, le=1.0)
     threshold: int = Field(default=25, ge=1, le=120)
+
+
+class CalibrationStart(BaseModel):
+    # Frames de camara a descartar tras cambiar el patron. El valor justo
+    # depende del hardware: buffer del driver, latencia USB y refresco del
+    # proyector. Por eso es un parametro y no una constante.
+    settle: int = Field(default=2, ge=0, le=10)
+    # Mas bits es mas resolucion y mas patrones que proyectar. 8 bits son 256
+    # columnas distinguibles, de sobra para una homografia.
+    max_bits: int = Field(default=8, ge=4, le=11)
+
+
+class CalibrationOut(BaseModel):
+    running: bool = False
+    progress: float = 0.0
+    stage: str = ""
+    ok: bool | None = None
+    message: str = ""
+    homography: list[list[float]] | None = None
+    rms: float | None = None
+    inliers: int = 0
+    coverage: float = 0.0
+    camera_size: list[int] | None = None
+    proj_size: list[int] | None = None
+    method: str = "graycode"
+    created_at: str | None = None
 
 
 class CameraSelectRequest(BaseModel):

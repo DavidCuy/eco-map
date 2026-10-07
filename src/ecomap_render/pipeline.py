@@ -136,6 +136,11 @@ class Pipeline:
         self._fallback_tex.filter = (moderngl.LINEAR, moderngl.LINEAR)
         self._fallback_fbo = ctx.framebuffer(color_attachments=[self._fallback_tex])
 
+        # Quad a pantalla completa para dibujar una textura tal cual: lo usa
+        # la calibracion para proyectar sus patrones sin pasar por una
+        # superficie.
+        self.vao_full = self._quad_completo()
+
         self.library = EffectLibrary(ctx, effects_dir, self.header)
         self.library.reload()
         # Textura negra de 1x1 para los efectos que piden camara cuando no hay:
@@ -173,6 +178,27 @@ class Pipeline:
             ", ".join(f"{c.effect_id}@{c.size[0]}x{c.size[1]}" for c in self.layers) or "ninguna",
         )
 
+    def _quad_completo(self):
+        """VAO de dos triangulos que cubren la pantalla, con UV directo."""
+        import numpy as np
+
+        # posicion (clip space) + uvq con q=1: sin perspectiva, es plano
+        datos = np.array(
+            [
+                -1.0, -1.0, 0.0, 0.0, 1.0,
+                 1.0, -1.0, 1.0, 0.0, 1.0,
+                 1.0,  1.0, 1.0, 1.0, 1.0,
+                -1.0, -1.0, 0.0, 0.0, 1.0,
+                 1.0,  1.0, 1.0, 1.0, 1.0,
+                -1.0,  1.0, 0.0, 1.0, 1.0,
+            ],
+            dtype="f4",
+        )
+        self._vbo_full = self.ctx.buffer(datos.tobytes())
+        return self.ctx.vertex_array(
+            self.warp_program, [(self._vbo_full, "2f 3f", "in_position", "in_uvq")]
+        )
+
     def clear_layers(self) -> None:
         for capa in self.layers:
             capa.release()
@@ -207,6 +233,12 @@ class Pipeline:
                 self._cam_texture.release()
             self._cam_texture = self.ctx.texture((ancho, alto), components=3)
             self._cam_texture.filter = (moderngl.LINEAR, moderngl.LINEAR)
+        if frame.ndim == 2:
+            import numpy as np
+
+            # Una fuente de un solo canal no deberia tumbar la proyeccion: se
+            # replica a tres y sigue.
+            frame = np.repeat(frame[:, :, None], 3, axis=2)
         # OpenCV entrega BGR y con el origen arriba; GL espera RGB desde abajo.
         self._cam_texture.write(frame[::-1, :, ::-1].tobytes())
         self._cam_seq = seq
@@ -304,6 +336,8 @@ class Pipeline:
 
     def release(self) -> None:
         self.clear_layers()
+        self.vao_full.release()
+        self._vbo_full.release()
         self.library.release()
         self._fallback_fbo.release()
         self._fallback_tex.release()
