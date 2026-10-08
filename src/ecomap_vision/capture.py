@@ -58,6 +58,11 @@ class CameraThread:
         self.motion_pos = (0.5, 0.5)
         self.motion_ms = 0.0
 
+        # Resultado de abrir, que ocurre dentro del hilo y no en `start()`.
+        self.opened = False
+        self.error: str | None = None
+        self._listo = threading.Event()
+
         self._source: CameraSource | None = None
         self._lock = threading.Lock()
         self._ultimo: Any | None = None       # frame a resolucion de captura
@@ -70,13 +75,38 @@ class CameraThread:
     # --- ciclo de vida ---
 
     def start(self) -> None:
-        """Abre la fuente. Lanza CameraError si no se puede: el llamador decide
-        que hacer, que en el render es seguir sin camara."""
-        self._source = open_source(self.uri)
+        """Lanza el hilo. **Abrir la camara pasa adentro del hilo**, no aca.
+
+        Medido en Windows con DirectShow: abrir una webcam tarda casi 5
+        segundos. Como el que llama a esto es el loop de render, abrir de forma
+        sincrona dejaba la proyeccion congelada todo ese rato cada vez que
+        alguien cambiaba de camara. En V4L2 es casi inmediato, pero no hay
+        motivo para que el render dependa de cual sea el backend.
+
+        El resultado se consulta con `wait_ready()`, o leyendo `opened` y
+        `error` cuando `ready` ya es True. El render lo publica por el bus
+        desde **su** hilo, que es donde vive el bus.
+        """
         self._stop.clear()
+        self._listo.clear()
+        self.opened = False
+        self.error = None
         self._thread = threading.Thread(target=self._loop, name="camera", daemon=True)
         self._thread.start()
-        log.info("camara: hilo iniciado (%s)", self.uri)
+        log.info("camara: hilo iniciado, abriendo %s", self.uri)
+
+    @property
+    def ready(self) -> bool:
+        """True cuando el intento de abrir termino, con exito o sin el."""
+        return self._listo.is_set()
+
+    def wait_ready(self, timeout: float | None = None) -> bool:
+        """Espera a que termine de abrir. Devuelve si quedo abierta.
+
+        Para tests y scripts: el render no espera, consulta `ready`.
+        """
+        self._listo.wait(timeout)
+        return self.opened
 
     def stop(self) -> None:
         self._stop.set()
@@ -105,6 +135,21 @@ class CameraThread:
     # --- interno ---
 
     def _loop(self) -> None:
+        try:
+            self._source = open_source(self.uri)
+        except CameraError as exc:
+            self.error = str(exc)
+            log.warning("camara: %s", exc)
+            self._listo.set()
+            return
+        except Exception as exc:  # noqa: BLE001 - abrir no debe tumbar el render
+            self.error = f"error inesperado al abrir la camara: {exc}"
+            log.exception("camara: fallo inesperado al abrir")
+            self._listo.set()
+            return
+        self.opened = True
+        self._listo.set()
+
         periodo = 1.0 / self.target_fps
         proximo = time.perf_counter()
         anterior = proximo

@@ -10,6 +10,7 @@ from httpx import ASGITransport, AsyncClient
 
 from ecomap_core.protocol import EV_CAMERA, ev
 from ecomap_core.settings import Settings
+from ecomap_vision import devices as devices_mod
 from ecomap_vision.devices import FAKE_URI, enumerate_cameras
 from ecomap_vision.source import CameraError, FakeSource, open_source
 from ecomap_web.main import create_app
@@ -42,7 +43,9 @@ def test_enumera_solo_los_nodos_de_captura(tmp_path: Path):
             "video2": ("Integrated Webcam", "0"),
         },
     )
-    devices = enumerate_cameras(sysfs_root=sysfs, by_id_dir=tmp_path / "no-existe")
+    devices = enumerate_cameras(
+        sysfs_root=sysfs, by_id_dir=tmp_path / "no-existe", system="Linux"
+    )
 
     uris = [d.uri for d in devices]
     assert uris == ["v4l2:///dev/video0", "v4l2:///dev/video2", FAKE_URI]
@@ -50,7 +53,9 @@ def test_enumera_solo_los_nodos_de_captura(tmp_path: Path):
 
 
 def test_enumera_sin_sysfs_devuelve_solo_la_simulada(tmp_path: Path):
-    devices = enumerate_cameras(sysfs_root=tmp_path / "nada", by_id_dir=tmp_path / "nada")
+    devices = enumerate_cameras(
+        sysfs_root=tmp_path / "nada", by_id_dir=tmp_path / "nada", system="Linux"
+    )
     assert [d.uri for d in devices] == [FAKE_URI]
 
 
@@ -68,13 +73,16 @@ def test_prefiere_la_ruta_estable_cuando_existe(tmp_path: Path):
 
     # El nodo real al que apunta el symlink debe coincidir con /dev/videoN; se
     # simula apuntando al mismo archivo que resolveria /dev/video0.
-    devices = enumerate_cameras(sysfs_root=sysfs, by_id_dir=by_id)
+    devices = enumerate_cameras(sysfs_root=sysfs, by_id_dir=by_id, system="Linux")
     assert devices[0].uri.startswith("v4l2://")
 
 
 def test_se_puede_excluir_la_simulada(tmp_path: Path):
     devices = enumerate_cameras(
-        sysfs_root=tmp_path / "nada", by_id_dir=tmp_path / "nada", include_fake=False
+        sysfs_root=tmp_path / "nada",
+        by_id_dir=tmp_path / "nada",
+        include_fake=False,
+        system="Linux",
     )
     assert devices == []
 
@@ -343,3 +351,189 @@ async def test_la_escena_le_dice_al_render_que_capa_necesita_realimentacion(clie
 
     capa = [m for m in enviados if m.get("op") == "scene"][-1]["scene"]["layers"][0]
     assert capa["needs_feedback"] is True
+
+
+# --- enumeracion en Windows ----------------------------------------------
+#
+# La mini PC de pruebas corre Windows, donde no hay sysfs ni `v4l2-ctl`. El
+# nombre sale de CIM y el indice es el orden en que CIM los devuelve.
+
+
+def _cim(monkeypatch, salida: str, *, falla: bool = False):
+    """Reemplaza la consulta a PowerShell por una respuesta fija."""
+    import subprocess
+
+    class _Resultado:
+        stdout = salida
+
+    def _run(*args, **kwargs):
+        if falla:
+            raise OSError("powershell no esta en el PATH")
+        return _Resultado()
+
+    monkeypatch.setattr(subprocess, "run", _run)
+
+
+def test_windows_enumera_por_indice_de_directshow(monkeypatch):
+    _cim(monkeypatch, '["Integrated Camera", "Logitech C270"]')
+
+    devices = enumerate_cameras(system="Windows")
+
+    assert [d.uri for d in devices] == ["dshow://0", "dshow://1", FAKE_URI]
+    assert devices[0].label == "Integrated Camera (indice 0)"
+    assert devices[0].kind == "dshow"
+    # Windows no tiene nada como /dev/v4l/by-id: no hay ruta estable que guardar
+    assert devices[0].node is None and devices[0].stable_path is None
+
+
+def test_windows_con_una_sola_camara(monkeypatch):
+    """`ConvertTo-Json` devuelve un escalar, no una lista, cuando hay un solo
+    elemento. Sin contemplarlo, la unica camara del equipo se pierde."""
+    _cim(monkeypatch, '"HD WebCam"')
+
+    devices = enumerate_cameras(system="Windows")
+
+    assert [d.uri for d in devices] == ["dshow://0", FAKE_URI]
+    assert devices[0].name == "HD WebCam"
+
+
+def test_windows_sin_camaras(monkeypatch):
+    _cim(monkeypatch, "")
+    assert [d.uri for d in enumerate_cameras(system="Windows")] == [FAKE_URI]
+
+
+def test_windows_si_powershell_falla_no_rompe_el_selector(monkeypatch):
+    """El dashboard tiene que seguir abriendo: sin camaras reales queda la
+    simulada, que es mejor que una pantalla de error."""
+    _cim(monkeypatch, "", falla=True)
+    assert [d.uri for d in enumerate_cameras(system="Windows")] == [FAKE_URI]
+
+
+def test_windows_con_respuesta_que_no_es_json(monkeypatch):
+    _cim(monkeypatch, "Get-CimInstance : Acceso denegado")
+    assert [d.uri for d in enumerate_cameras(system="Windows")] == [FAKE_URI]
+
+
+def test_la_consulta_pide_solo_camaras_presentes():
+    """Windows recuerda camaras desenchufadas; listarlas llevaria a elegir una
+    que no esta."""
+    assert "PNPClass -eq 'Camera'" in devices_mod.PS_CAMARAS
+    assert "Status -eq 'OK'" in devices_mod.PS_CAMARAS
+
+
+# --- backends de captura -------------------------------------------------
+
+
+def test_open_source_acepta_los_backends_de_windows(monkeypatch):
+    """`dshow://0` deja el indice en netloc, no en path: urlparse lee lo que
+    sigue a `//` como host. Sin contemplarlo la URI se veia sin device.
+
+    No se abre nada: el test corre igual en un equipo con camara y en uno sin.
+    """
+    from urllib.parse import urlparse
+
+    from ecomap_vision import source as source_mod
+
+    pedidos = []
+    monkeypatch.setattr(
+        source_mod,
+        "OpenCVSource",
+        lambda device, **kw: pedidos.append((device, kw.get("backend"))),
+    )
+
+    for uri in ("dshow://0", "msmf://1"):
+        assert urlparse(uri).path == "", "el indice viaja en netloc"
+        open_source(uri)
+
+    assert pedidos == [("0", "dshow"), ("1", "msmf")]
+
+
+def test_open_source_sigue_pasando_la_ruta_en_linux(monkeypatch):
+    """El camino V4L2 es el que va a usar la Pi: agregar Windows no debe
+    cambiarlo."""
+    from ecomap_vision import source as source_mod
+
+    pedidos = []
+    monkeypatch.setattr(
+        source_mod,
+        "OpenCVSource",
+        lambda device, **kw: pedidos.append((device, kw.get("backend"))),
+    )
+
+    open_source("v4l2:///dev/v4l/by-id/usb-046d_C270-video-index0")
+
+    assert pedidos == [("/dev/v4l/by-id/usb-046d_C270-video-index0", "v4l2")]
+
+
+def test_open_source_rechaza_dshow_sin_indice():
+    with pytest.raises(CameraError, match="sin device"):
+        open_source("dshow://")
+
+
+def test_cada_backend_tiene_su_constante_y_su_motivo():
+    """Un backend sin mensaje propio manda al operador a buscar al lugar
+    equivocado: en Linux se revisa el `--device`, en Windows los permisos."""
+    from ecomap_vision.source import BACKENDS, MOTIVOS
+
+    assert set(BACKENDS) == set(MOTIVOS)
+    assert "Privacidad" in MOTIVOS["dshow"]
+    assert "contenedor" in MOTIVOS["v4l2"]
+
+
+def test_backend_desconocido_se_rechaza():
+    from ecomap_vision.source import _backend_const
+
+    cv2 = pytest.importorskip("cv2")
+    with pytest.raises(CameraError, match="backend de camara desconocido"):
+        _backend_const(cv2, "gstreamer")
+
+
+def test_el_modo_manual_de_exposicion_no_es_el_mismo_numero_en_cada_backend():
+    """V4L2 usa el enum de su API (1 = manual) y DirectShow su propia
+    convencion (0.25 = manual). Mandar el valor de uno al otro deja la camara
+    en automatico sin que nada falle."""
+    from ecomap_vision.source import AUTO_EXPOSURE_AUTO, AUTO_EXPOSURE_MANUAL
+
+    assert AUTO_EXPOSURE_MANUAL["v4l2"] == 1.0
+    assert AUTO_EXPOSURE_MANUAL["dshow"] == 0.25
+    assert set(AUTO_EXPOSURE_MANUAL) == set(AUTO_EXPOSURE_AUTO)
+    for backend, manual in AUTO_EXPOSURE_MANUAL.items():
+        assert manual != AUTO_EXPOSURE_AUTO[backend]
+
+
+def test_la_exposicion_distingue_ignorado_de_no_confirmable():
+    """Un driver que devuelve -1 no esta diciendo "lo ignore": esta diciendo
+    que no se puede leer. Reportar las dos cosas igual manda a buscar un
+    problema de camara donde puede no haberlo.
+
+    Medido en Windows con DirectShow sobre una webcam real: `auto_exposure`
+    vuelve -1 aunque el `set` devuelva True.
+    """
+    from ecomap_vision.source import AUTO_EXPOSURE_MANUAL, OpenCVSource
+
+    class _Capture:
+        def __init__(self, devuelve):
+            self.devuelve = devuelve
+
+        def set(self, prop, valor):
+            return True
+
+        def get(self, prop):
+            return self.devuelve
+
+    fuente = OpenCVSource.__new__(OpenCVSource)
+    fuente.backend = "dshow"
+    fuente.info = type("I", (), {"uri": "dshow://0"})()
+
+    import cv2
+
+    fuente._cv2 = cv2
+
+    fuente._capture = _Capture(-1.0)
+    assert fuente.set_auto_exposure(False) == "sin_confirmar"
+
+    fuente._capture = _Capture(AUTO_EXPOSURE_MANUAL["dshow"])
+    assert fuente.set_auto_exposure(False) == "aplicado"
+
+    fuente._capture = _Capture(0.75)
+    assert fuente.set_auto_exposure(False) == "ignorado"

@@ -138,6 +138,10 @@ class CameraStatus(BaseModel):
     fps: float | None = None
     backend: str | None = None
     message: str | None = None
+    # Formato que el driver entrega de verdad. Si no es MJPG, los fps los
+    # limita el bus USB por mas que la camara declare otra cosa (ADR-010). En
+    # Windows no hay `v4l2-ctl`, asi que este campo es la unica forma de verlo.
+    fourcc: str | None = None
 
 
 class MotionSettings(BaseModel):
