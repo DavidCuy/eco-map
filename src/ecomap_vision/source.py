@@ -89,7 +89,12 @@ class FakeSource:
 
         self._frame += 1
         # Degradado que se desplaza: sirve para ver que los frames avanzan.
-        fila = (np.arange(self.info.width, dtype=np.uint8) + self._frame) % 255
+        # El desfase se reduce antes de sumarlo: NumPy 2 ya no hace el casting
+        # por valor, asi que sumar un entero mayor que 255 a un array uint8
+        # lanza OverflowError. Pasaba en el frame 256, o sea a los 17 segundos
+        # a 15 fps, que es mas de lo que dura cualquier test.
+        desfase = np.uint8(self._frame % 256)
+        fila = (np.arange(self.info.width, dtype=np.uint8) + desfase) % 255
         frame = np.tile(fila, (self.info.height, 1))
         return np.dstack([frame, np.roll(frame, 40), np.roll(frame, 80)])
 

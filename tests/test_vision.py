@@ -228,3 +228,18 @@ def test_detener_cierra_la_fuente(hilo):
     h.stop()
 
     assert creadas[0].cerrada is True
+
+
+def test_la_camara_simulada_aguanta_mas_de_256_frames():
+    """NumPy 2 lanza OverflowError al sumar un entero mayor que 255 a un array
+    uint8. El desfase del degradado era ese entero, asi que la camara simulada
+    moria en el frame 256: 17 segundos a 15 fps, mas de lo que dura un test."""
+    from ecomap_vision.source import FakeSource
+
+    fuente = FakeSource()
+    for _ in range(300):
+        frame = fuente.read()
+
+    assert frame is not None
+    assert frame.shape == (480, 640, 3)
+    assert frame.dtype == np.uint8
