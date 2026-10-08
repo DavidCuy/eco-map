@@ -97,6 +97,31 @@ video simulado a 640×480:
 Son números de un `FakeSource` leyendo un mp4: una webcam real decodifica MJPEG de verdad y va a
 costar más. Está en la checklist de hardware.
 
+### Antes de volver a medir con cámara real: confirmar el formato
+
+**Mirar `fourcc` primero.** Si el driver está entregando `YUY2` en vez de `MJPG`, el número que
+salga no mide lo que se cree: no hay decodificación JPEG que medir, y en cambio el ancho de banda
+USB limita los fps. Una medición tomada en ese estado no es comparable con la de otra máquina ni
+con el presupuesto.
+
+Pasaba en silencio hasta el PR #39: el orden de los `set` de OpenCV renegocia el formato, y pedir
+MJPG antes del tamaño hacía que DirectShow terminara en YUY2. El estado actual se lee en
+`GET /api/camera/status` (campo `fourcc`) y el dashboard avisa cuando no es MJPG.
+
+Primera medición con webcam real, sobre la laptop de desarrollo (Windows, DirectShow) — **no** es
+la mini PC, sirve de orden de magnitud:
+
+| qué | medido |
+|---|---|
+| abrir la cámara | ~4.4 s |
+| formato entregado | `MJPG` (con el orden corregido; `YUY2` con el anterior) |
+| fps reales | 10.1, con el driver declarando 15 |
+| exposición manual | `sin_confirmar`: el driver devuelve −1 |
+
+Los fps reales por debajo de lo declarado son de esta cámara, no del backend: el formato ya es
+MJPG. Que el driver declare 15 y entregue 10 es otra razón para medir y no creerle a
+`CAP_PROP_FPS`.
+
 ## Realimentación en los efectos: `u_prev`
 
 Un shader no tiene memoria: cada frame arranca de cero. Para que `camera_echo` pueda dejar estela,
