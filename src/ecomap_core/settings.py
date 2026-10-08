@@ -51,6 +51,14 @@ class Settings(BaseSettings):
     # Backend de contexto GL para el modo headless: egl en la Pi y en contenedores,
     # None deja que moderngl elija (escritorio con GPU).
     gl_backend: str | None = None
+    # --- modo window ---
+    # Pantalla completa a la resolucion nativa del monitor. Imprescindible al
+    # proyectar: una ventana con barra de titulo corre la imagen unos pixeles y
+    # la calibracion deja de corresponder con lo que se ve.
+    window_fullscreen: bool = False
+    # Monitor destino, 0 = primario. En la mini PC con dos salidas HDMI el
+    # proyector no siempre es el primario, y GLFW va al primario por defecto.
+    window_monitor: int = Field(default=0, ge=0)
 
     # --- preview MJPEG que publica el render en modo headless ---
     preview_port: int = 8001
