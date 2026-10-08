@@ -103,6 +103,20 @@ Pasos completos en
 [`Mini-PC-Setup.md`](.local_knowledge/04-Hardware/Mini-PC-Setup.md) y
 [`Despliegue-Raspberry.md`](.local_knowledge/05-Operacion/Despliegue-Raspberry.md).
 
+## Equipo de pruebas Windows
+
+Para un equipo que corre Eco-Map nativo (sin contenedores, en modo `window`), el
+ciclo de actualizacion es un solo comando en ese equipo:
+
+```powershell
+.\scripts\update.ps1
+```
+
+Trae el codigo (con `git pull` si la carpeta es un clon, con el zip de la rama si
+no), sincroniza dependencias y relanza los procesos que estaban corriendo. La
+puesta en marcha inicial esta en
+[`Mini-PC-Setup.md`](.local_knowledge/04-Hardware/Mini-PC-Setup.md).
+
 ## Comandos
 
 ```bash
