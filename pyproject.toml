@@ -30,6 +30,11 @@ vision = [
 kms = [
     "pygame>=2.6",
 ]
+# Solo para el modo de salida window. moderngl-window trae pyglet, no glfw, asi
+# que sin esto el modo window falla con ModuleNotFoundError al crear la ventana.
+window = [
+    "glfw>=2.7",
+]
 
 [dependency-groups]
 dev = [

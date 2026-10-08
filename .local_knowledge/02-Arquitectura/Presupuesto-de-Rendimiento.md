@@ -7,16 +7,17 @@ tags: [arquitectura, rendimiento]
 Objetivo: **16.6 ms por frame** (60 fps); 33 ms (30 fps) aceptable con partículas. Dos plataformas
 soportadas, con cuellos distintos. Ver [[ADR-013-Plataforma-Agnostica]].
 
-| | Mini PC (N3350) | Raspberry Pi 4 |
+| | Mini PC (N95) | Raspberry Pi 4 |
 |---|---|---|
-| CPU | 2 núcleos Goldmont 1.1–2.4 GHz | 4 núcleos Cortex-A72 1.5 GHz |
-| GPU | HD 500, 12 EUs @650 MHz | VideoCore VI |
-| Cuello esperado | **CPU** | **fillrate de GPU** |
+| CPU | 4 núcleos Gracemont 1.7–3.4 GHz | 4 núcleos Cortex-A72 1.5 GHz |
+| GPU | UHD Gen12 @1.2 GHz (EUs por confirmar) | VideoCore VI |
+| Cuello esperado | **fillrate de GPU** | **fillrate de GPU** |
 
-En la mini PC hay más margen de GPU pero la mitad de núcleos, así que el riesgo se mueve: el hilo
-de cámara ([[Modulo-Camara-Feedback]]), que decodifica MJPEG y redimensiona por CPU, pasa a competir
-con el loop de render y con el web. Ninguna de las dos columnas está medida todavía en `kms`:
-los números de abajo son presupuesto, no observación. Qué medir: [[Mini-PC-Setup]].
+El equipo que llegó trae un N95, no el N3350 con el que se dimensionó esto, y eso mueve el riesgo:
+con 4 núcleos el hilo de cámara ([[Modulo-Camara-Feedback]]), que decodifica MJPEG y redimensiona
+por CPU, ya no compite por la mitad de la máquina contra el loop de render y el web. Queda el
+fillrate como cuello en las dos plataformas. Ninguna de las dos columnas está medida todavía en
+`kms`: los números de abajo son presupuesto, no observación. Qué medir: [[Mini-PC-Setup]].
 
 ## Reparto en Pi 4 (1080p)
 

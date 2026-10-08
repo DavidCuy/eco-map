@@ -73,6 +73,18 @@ uv run ecomap-web             # en otra
 En Linux y macOS el bus usa un socket Unix. En Windows CPython no expone `AF_UNIX`, así que hay
 que usar `ECOMAP_BUS=tcp://127.0.0.1:8765` en ambos procesos.
 
+Para ver el render en una ventana con la GPU real hace falta el extra `window`: moderngl-window
+trae pyglet, no glfw, y sin glfw el modo falla al crear la ventana.
+
+```bash
+uv sync --extra render --extra window
+ECOMAP_RENDER_MODE=window uv run ecomap-render
+```
+
+**El bus es TCP, así que los dos procesos no tienen que estar en la misma máquina.** El render
+escucha y el web es cliente: sirve para proyectar desde el equipo que tiene el proyector mientras
+se edita y se sirve la UI desde otro. Ver [`Mini-PC-Setup.md`](.local_knowledge/04-Hardware/Mini-PC-Setup.md).
+
 ### En hardware
 
 El sistema es agnóstico de plataforma: corre en x86-64 y en arm64 con el mismo código. Cada destino
@@ -113,6 +125,8 @@ usadas:
 | `ECOMAP_WIDTH` / `ECOMAP_HEIGHT` / `ECOMAP_FPS` | 1920 / 1080 / 60 | salida del render |
 | `ECOMAP_DB` | `/data/ecomap.db` | base SQLite |
 | `ECOMAP_GL_BACKEND` | — | `egl` dentro de contenedores Linux |
+| `ECOMAP_WINDOW_FULLSCREEN` | `0` | en modo `window`, pantalla completa. Obligatorio al proyectar |
+| `ECOMAP_WINDOW_MONITOR` | `0` | monitor destino; `1` para el proyector en la segunda salida |
 
 ## Estructura
 
@@ -142,6 +156,9 @@ el código:
 
 - El modo `kms` está implementado pero **no validado contra hardware**: falta probarlo en una Pi
   con proyector.
+- El modo `window` ya crea contexto sobre una GPU real (verificado en Intel Iris Xe), pero
+  **la pantalla completa no se probó contra un proyector**: la resolución la impone el monitor, y
+  si el modo de video no coincide con `ECOMAP_WIDTH`/`HEIGHT` manda el monitor.
 - **La imagen arm64 todavía no se construyó.** Desde Windows no se puede: WSL2 no permite usar
   `binfmt_misc`, así que no hay emulación qemu. Hay que construirla en la Pi o en CI. La imagen
   amd64 sí está validada.
