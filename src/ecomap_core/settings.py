@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 RenderMode = Literal["kms", "window", "headless"]
@@ -27,13 +27,33 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        # Los campos con validation_alias se construyen por nombre igual, que es
+        # como los arman los tests.
+        populate_by_name=True,
     )
 
     # --- almacenamiento ---
+    # Los compose y el Dockerfile usan ECOMAP_EFFECTS y ECOMAP_MEDIA desde el
+    # Hito 0, pero el nombre que pydantic deriva del campo es ECOMAP_EFFECTS_DIR:
+    # las variables cortas nunca hicieron nada. No se noto porque dentro del
+    # contenedor el valor coincidia con el default, asi que daba igual. Fuera del
+    # contenedor no: en Windows el default /effects se vuelve \effects y el
+    # catalogo no carga. Se aceptan las dos formas para no romper despliegues.
+    # El prefijo ECOMAP_ no se aplica a los campos con validation_alias, por eso
+    # los alias van con el nombre completo.
     db: Path = Path("/data/ecomap.db")
-    effects_dir: Path = Path("/effects")
-    media_dir: Path = Path("/media")
-    migrations_dir: Path = Path("migrations")
+    effects_dir: Path = Field(
+        default=Path("/effects"),
+        validation_alias=AliasChoices("ECOMAP_EFFECTS_DIR", "ECOMAP_EFFECTS"),
+    )
+    media_dir: Path = Field(
+        default=Path("/media"),
+        validation_alias=AliasChoices("ECOMAP_MEDIA_DIR", "ECOMAP_MEDIA"),
+    )
+    migrations_dir: Path = Field(
+        default=Path("migrations"),
+        validation_alias=AliasChoices("ECOMAP_MIGRATIONS_DIR", "ECOMAP_MIGRATIONS"),
+    )
 
     # --- bus IPC entre web y render ---
     bus: str = "/run/ecomap/bus.sock"
