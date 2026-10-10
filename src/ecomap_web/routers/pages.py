@@ -34,6 +34,27 @@ def render_fragment(request: Request, template: str, context: dict[str, Any]) ->
     return templates.TemplateResponse(request, template, context)
 
 
+@router.get("/efectos", response_class=HTMLResponse)
+def efectos(request: Request, bus: BusDep, state: StateDep, db: DbDep) -> Response:
+    """Pagina propia del catalogo.
+
+    Estaba como un panel mas del dashboard, donde casi nunca se toca: mirar
+    que efectos hay y subir uno nuevo son cosas de preparacion, no de montaje.
+    Con pagina propia hay sitio para la grilla y para el formulario de subida,
+    que necesita previsualizacion y no entraba en un acordeon.
+    """
+    from ecomap_web.routers.effects import catalogo
+
+    return templates.TemplateResponse(
+        request,
+        "effects.html",
+        {
+            "status": build_status(bus, state, request.app.state.version),
+            "effects": catalogo(db, state),
+        },
+    )
+
+
 @router.get("/", response_class=HTMLResponse)
 def dashboard(
     request: Request,

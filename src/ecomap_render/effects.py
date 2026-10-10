@@ -119,6 +119,11 @@ class EffectLibrary:
     def get(self, effect_id: str) -> CompiledEffect | None:
         return self.compiled.get(effect_id)
 
+    def efectos(self) -> list[Effect]:
+        """Los efectos cargados. Lo usa la biblioteca de medios para saber
+        cuales traen un archivo que alimentar."""
+        return [c.effect for c in self.compiled.values()]
+
     def release(self) -> None:
         for compilado in self.compiled.values():
             compilado.release()

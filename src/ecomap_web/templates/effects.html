@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{# Página propia del catálogo.
+
+   Estaba como un panel más del dashboard, donde casi nunca se toca: mirar qué
+   efectos hay y subir uno nuevo son cosas de preparación, no de montaje. Con
+   página propia hay sitio para la grilla y para el formulario de subida, que
+   necesita previsualización y no entraba en un acordeón. #}
+
+{% block content %}
+<div x-data="catalogo()" class="catalogo-pagina">
+
+  <header class="titulo-pagina">
+    <h2>Efectos</h2>
+    <a role="button" class="secondary" href="/">← volver al dashboard</a>
+  </header>
+
+  <p x-show="error" class="error" x-text="error"></p>
+
+  {# --- subir uno nuevo --------------------------------------------- #}
+  <details class="panel" open>
+    <summary>Agregar un efecto</summary>
+
+    <div class="subir-efecto">
+      <div class="subir-controles">
+        <label>
+          Archivo
+          <input type="file" @change="elegir($event)"
+                 accept=".jpg,.jpeg,.png,.webp,.bmp,.gif,.mp4,.webm,.mov,.m4v">
+          <small class="muted">
+            Imagen, gif o video corto. Una imagen se puede mover; un gif y un
+            video ya traen su movimiento y van tal cual.
+          </small>
+        </label>
+
+        <label>
+          Nombre
+          <input type="text" x-model="nombre" maxlength="60"
+                 placeholder="cómo querés verlo en la lista">
+        </label>
+
+        {# Los controles solo tienen sentido con una imagen: a un gif o un
+           video agregarle desplazamiento encima solo los ensucia. #}
+        <template x-if="kind === 'image'">
+          <div class="params">
+            <label class="param">
+              <span>Velocidad <small class="muted" x-text="speed.toFixed(2)"></small></span>
+              <input type="range" min="0" max="1" step="0.01" x-model.number="speed">
+            </label>
+            <label class="param">
+              <span>Ángulo <small class="muted" x-text="angle + '°'"></small></span>
+              <input type="range" min="0" max="360" step="1" x-model.number="angle">
+            </label>
+            <small class="muted">
+              Velocidad 0 la deja quieta. El ángulo es hacia dónde se desplaza.
+            </small>
+          </div>
+        </template>
+
+        <template x-if="kind && kind !== 'image'">
+          <small class="muted">
+            Un <span x-text="kind === 'gif' ? 'gif' : 'video'"></span> va tal cual,
+            en bucle y sin parámetros.
+          </small>
+        </template>
+
+        <button @click="guardar()" :disabled="!archivo || !nombre.trim() || subiendo"
+                x-text="subiendo ? 'guardando…' : 'Guardar efecto'"></button>
+      </div>
+
+      {# El canvas muestra **solo el efecto**: sin malla, sin handles, sin
+         preview de proyección. Es para decidir si el archivo sirve. #}
+      <figure class="previsualizacion">
+        <canvas x-ref="lienzo" x-show="kind === 'image'"></canvas>
+        <video x-ref="video" x-show="kind && kind !== 'image'"
+               autoplay loop muted playsinline></video>
+        <figcaption x-show="!kind" class="muted">
+          Elegí un archivo para previsualizarlo.
+        </figcaption>
+        <figcaption x-show="kind === 'image'" class="muted">
+          Así se va a ver proyectado, con el movimiento aplicado.
+        </figcaption>
+      </figure>
+    </div>
+  </details>
+
+  {# --- lo que ya hay ----------------------------------------------- #}
+  <details class="panel" open>
+    <summary>Catálogo</summary>
+    <div id="catalog">
+      {% include "partials/catalog.html" %}
+    </div>
+  </details>
+</div>
+
+<script src="/static/catalogo.js?v={{ status.version }}"></script>
+{% endblock %}

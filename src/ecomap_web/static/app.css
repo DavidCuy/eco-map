@@ -502,3 +502,57 @@
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* --- página de efectos --- */
+
+.titulo-pagina {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.6rem;
+}
+
+.titulo-pagina h2 { margin: 0; }
+.titulo-pagina [role="button"] { margin: 0; width: auto; padding: 0.3rem 0.8rem; font-size: 0.85rem; }
+
+/* Controles a la izquierda, lo que se va a proyectar a la derecha. En el
+   celular se apila: la previsualización primero no sirve de nada si todavía
+   no se eligió el archivo. */
+.subir-efecto {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 720px) {
+  .subir-efecto { grid-template-columns: 1fr; }
+}
+
+.subir-controles label { margin-bottom: 0.6rem; }
+.subir-controles button { margin-top: 0.4rem; }
+
+/* El lienzo muestra **solo el efecto**: sin malla, sin handles, sin preview
+   de proyección. Es para decidir si el archivo sirve, no para calibrar. */
+.previsualizacion {
+  margin: 0;
+  padding: 0;
+  background: #000;
+  border-radius: var(--pico-border-radius);
+  overflow: hidden;
+}
+
+.previsualizacion canvas,
+.previsualizacion video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  object-fit: contain;
+}
+
+.previsualizacion figcaption {
+  padding: 0.4rem 0.6rem;
+  font-size: 0.8rem;
+}

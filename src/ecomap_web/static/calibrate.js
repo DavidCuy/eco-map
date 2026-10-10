@@ -20,6 +20,7 @@ function workspace(config) {
     // Capa elegida: sus parametros ocupan el panel de abajo. Vive en el
     // cliente porque el servidor no tiene por que saber que estas mirando.
     layerId: null,
+    aviso: null,
     status: config.status,
     ws: false,
     saving: false,
@@ -134,6 +135,7 @@ function workspace(config) {
       // engancharlo después de cada swap de HTMX: el <ol> es nuevo cada vez.
       this.engancharOrden();
       this.engancharOrdenCaras();
+      this.preseleccionarEfecto();
       document.body.addEventListener('htmx:afterSwap', () => this.engancharOrden());
     },
 
@@ -199,6 +201,23 @@ function workspace(config) {
         // para no dejar la pantalla mintiendo.
         if (window.htmx) htmx.ajax('GET', '/api/scenes/panel', '#scenes');
       }
+    },
+
+    // --- vuelta desde la pagina de efectos ---
+
+    preseleccionarEfecto() {
+      // Al guardar un efecto nuevo se vuelve acá con `?efecto=<id>`. Dejarlo
+      // elegido en el formulario de capa ahorra buscarlo en la lista, que es
+      // lo único que uno quiere hacer justo después de crearlo.
+      const id = new URLSearchParams(location.search).get('efecto');
+      if (!id) return;
+      const select = document.querySelector('.nueva-capa select[name=effect_id]');
+      if (select && [...select.options].some((o) => o.value === id)) {
+        select.value = id;
+        this.aviso = 'Efecto «' + id + '» listo para usar: elegí una cara y agregá la capa.';
+      }
+      // Se limpia la URL: recargar no deberia volver a avisar de algo viejo.
+      history.replaceState({}, '', location.pathname);
     },
 
     // --- orden de las caras ---

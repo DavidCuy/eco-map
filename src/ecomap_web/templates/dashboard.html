@@ -26,6 +26,8 @@
   </header>
 
   <p x-show="error" class="error" x-text="error"></p>
+  {# Vuelta desde la página de efectos con uno recién guardado. #}
+  <p x-show="aviso" class="aviso" x-text="aviso"></p>
 
   {% if fallback_activo %}
   {# El efecto a pantalla completa sin capas es intencional, pero con caras ya
@@ -168,13 +170,6 @@
     <summary>Escenas guardadas</summary>
     <div id="snapshots">
       {% include "partials/snapshots.html" %}
-    </div>
-  </details>
-
-  <details class="panel">
-    <summary>Catálogo de efectos</summary>
-    <div id="catalog">
-      {% include "partials/catalog.html" %}
     </div>
   </details>
 
