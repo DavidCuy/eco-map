@@ -44,8 +44,7 @@ def dashboard(
 ) -> Response:
     from ecomap_web.routers import camera as camera_router
     from ecomap_web.routers.camera import devices_out
-    from ecomap_web.routers.effects import catalogo, valores_efectivos
-    from ecomap_web.services import effects as effect_service
+    from ecomap_web.routers.effects import catalogo, contexto_controles
     from ecomap_web.services import scenes as scene_service
     from ecomap_web.services import surfaces as surface_service
 
@@ -90,11 +89,9 @@ def dashboard(
             # calibradas, es indistinguible de que el warp este roto: por eso
             # la UI lo dice en vez de dejarlo adivinar.
             "fallback_activo": _fallback_activo(db),
-            "active_effect": effect_service.obtener(db, state.effect) if state.effect else None,
-            "values": valores_efectivos(
-                effect_service.obtener(db, state.effect) if state.effect else None,
-                state.effect_params,
-            ),
+            # Mismo constructor que usan los endpoints que intercambian el
+            # fragmento: si la plantilla pide algo nuevo, lo reciben los tres.
+            **contexto_controles(request, db, state),
             # Se inyecta como JSON y no como atributos sueltos: la malla puede
             # tener cientos de puntos. Va dentro de un <script type="application/json">,
             # y se escapan los "<" para que un nombre de superficie no pueda

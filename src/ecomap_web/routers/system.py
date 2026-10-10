@@ -43,7 +43,13 @@ async def set_blackout(
     set_setting(db, "blackout", "1" if payload.on else "0")
     if not delivered:
         log_event(db, "warn", "web", "blackout guardado pero el render no estaba conectado")
-    status = _status(request, bus, state)
     if request.headers.get("HX-Request"):
-        return render_fragment(request, "partials/controls.html", {"status": status})
-    return status
+        # El contexto completo, no solo el estado: el boton de blackout
+        # reemplaza todo el bloque de controles, y con un contexto parcial el
+        # selector de efectos volvia vacio y los parametros desaparecian.
+        from ecomap_web.routers.effects import contexto_controles
+
+        return render_fragment(
+            request, "partials/controls.html", contexto_controles(request, db, state)
+        )
+    return _status(request, bus, state)

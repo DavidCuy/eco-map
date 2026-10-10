@@ -172,17 +172,28 @@ async def _aplicar(bus, db, state, writer) -> None:
         log_event(db, "warn", "web", "efecto guardado pero el render no estaba conectado")
 
 
+def contexto_controles(request: Request, db, state) -> dict:
+    """Todo lo que `partials/controls.html` necesita para renderizarse entero.
+
+    Vive aca y no en cada endpoint porque la plantilla se intercambia desde
+    tres lugares distintos (efecto activo, parametros y blackout) y cada uno
+    armaba su propio diccionario. Al que le faltaba `effects`, el `{% for %}`
+    no iteraba nada y devolvia **un select vacio con HTTP 200**: sin error, sin
+    log, y el desplegable de efectos quedaba en blanco hasta recargar la
+    pagina. Un solo constructor hace que eso no se pueda repetir.
+    """
+    efecto = service.obtener(db, state.effect) if state.effect else None
+    return {
+        "status": build_status(request.app.state.bus, state, request.app.state.version),
+        "effects": catalogo(db, state),
+        "active_effect": efecto,
+        "values": valores_efectivos(efecto, state.effect_params),
+    }
+
+
 def _respuesta(request: Request, db, state) -> Response | EffectActive:
     if request.headers.get("HX-Request"):
-        efecto = service.obtener(db, state.effect)
         return render_fragment(
-            request,
-            "partials/controls.html",
-            {
-                "status": build_status(request.app.state.bus, state, request.app.state.version),
-                "effects": catalogo(db, state),
-                "active_effect": efecto,
-                "values": valores_efectivos(efecto, state.effect_params),
-            },
+            request, "partials/controls.html", contexto_controles(request, db, state)
         )
     return EffectActive(id=state.effect or "", params=state.effect_params)

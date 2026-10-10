@@ -140,3 +140,60 @@ async def test_un_nombre_de_superficie_no_puede_inyectar_html(cliente):
 
     assert "</script><img src=x>" not in html
     assert "\u003c/script" in html
+
+
+async def test_el_blackout_devuelve_los_controles_completos(cliente):
+    """Regresion: el boton de blackout reemplaza **todo** el bloque de
+    controles, no solo su propio estado.
+
+    El endpoint pasaba un contexto con `status` nada mas. Jinja no se queja de
+    iterar algo que no existe, asi que el `{% for effect in effects %}` no
+    producia ninguna opcion: la respuesta volvia con HTTP 200 y un
+    `<select>` **vacio**, sin error ni log. El desplegable de efectos quedaba
+    en blanco hasta recargar la pagina, y el usuario no tenia forma de saber
+    por que.
+    """
+    client, _ = cliente
+
+    respuesta = await client.post(
+        "/api/system/blackout", json={"on": True}, headers={"HX-Request": "true"}
+    )
+
+    assert respuesta.status_code == 200
+    html = respuesta.text
+    assert "<select" in html
+    # Los efectos del catalogo de verdad, no un select vacio
+    assert html.count("<option") >= 2, "el selector de efectos volvio vacio"
+    assert "grid_test" in html
+
+
+async def test_los_tres_caminos_al_fragmento_de_controles_coinciden(cliente):
+    """Blackout, cambio de efecto y la pagina entera comparten plantilla.
+
+    Si cada uno arma su propio contexto, el que se olvide de una clave rompe
+    en silencio. Se comprueba que los tres traigan las mismas opciones.
+    """
+    client, _ = cliente
+
+    pagina = (await client.get("/")).text
+    blackout = (
+        await client.post(
+            "/api/system/blackout", json={"on": True}, headers={"HX-Request": "true"}
+        )
+    ).text
+    efecto = (
+        await client.post(
+            "/api/effects/active", json={"id": "grid_test"}, headers={"HX-Request": "true"}
+        )
+    ).text
+
+    def opciones(html: str) -> set[str]:
+        import re
+
+        return set(re.findall(r'<option value="([^"]+)"', html))
+
+    # La pagina trae mas selects (caras, capas, camara); alcanza con que los
+    # efectos del fragmento esten tambien en ella.
+    assert opciones(blackout) == opciones(efecto)
+    assert opciones(blackout) <= opciones(pagina)
+    assert len(opciones(blackout)) >= 2
