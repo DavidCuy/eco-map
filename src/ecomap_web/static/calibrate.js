@@ -144,6 +144,29 @@ function workspace(config) {
       };
     },
 
+    // --- blackout ---
+    //
+    // Apagar y prender la proyección es lo que más se toca durante un montaje,
+    // así que vive sobre el preview y no dentro de un panel plegado. Es un
+    // interruptor y nada más: no arrastra el efecto global, que es otra cosa.
+
+    get blackout() {
+      return !!this.status.blackout;
+    },
+
+    async toggleBlackout() {
+      const nuevo = !this.status.blackout;
+      // Se pinta el estado nuevo sin esperar la respuesta: el ida y vuelta es
+      // de milisegundos, pero un botón de apagado que tarda en reaccionar se
+      // toca dos veces.
+      this.status = { ...this.status, blackout: nuevo };
+      try {
+        await this.api('POST', '/api/system/blackout', { on: nuevo });
+      } catch (e) {
+        this.status = { ...this.status, blackout: !nuevo };
+      }
+    },
+
     // --- auto-calibración ---
     //
     // La corre el render, que es quien tiene proyector y cámara. Acá solo se
@@ -324,10 +347,12 @@ function workspace(config) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, r.width, r.height);
 
-      for (const s of this.surfaces) {
-        const activa = s.id === this.activeId;
-        this.drawMesh(ctx, s, activa);
-      }
+      // Solo la cara en la que se está trabajando. Dibujar todas encima del
+      // mismo preview las mezclaba visualmente: con dos o tres caras
+      // superpuestas no se distingue qué malla es cuál, y los handles de una
+      // caen sobre las líneas de otra. Se trabaja una por vez; la tira de
+      // abajo cambia de cara.
+      if (this.active) this.drawMesh(ctx, this.active, true);
     },
 
     drawMesh(ctx, surface, activa) {

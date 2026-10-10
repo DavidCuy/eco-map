@@ -36,6 +36,20 @@
   </p>
   {% endif %}
 
+  {# Barra sobre el preview: lo que se toca sin dejar de mirar la proyección.
+     El blackout está acá y no dentro de un panel porque apagar y prender es
+     la acción más frecuente de un montaje. #}
+  <div class="sobre-preview">
+    <button class="blackout-toggle"
+            :class="blackout ? 'contrast' : 'secondary outline'"
+            :aria-pressed="blackout"
+            @click="toggleBlackout()">
+      <span class="punto-blackout" :class="blackout ? 'apagado' : 'encendido'"></span>
+      <span x-text="blackout ? 'Proyección apagada' : 'Proyectando'"></span>
+    </button>
+    <small class="muted" x-show="active" x-text="'editando: ' + (active ? active.name : '')"></small>
+  </div>
+
   {# Canvas: el preview del render de fondo, los handles encima. Se separa en
      dos capas para no tener que leer píxeles del stream, que ensuciaría el
      canvas por CORS. #}
@@ -54,6 +68,23 @@
     <div class="zoom" :style="zoomStyle()">
       <div class="crosshair"></div>
     </div>
+  </div>
+
+  {# Tira de caras, debajo del canvas: como solo se dibuja la cara activa,
+     elegir cuál es el primer paso y no el último. Con una superficie por cara
+     física, saltar entre ellas tiene que costar un toque. #}
+  <div class="strip">
+    <template x-for="s in surfaces" :key="s.id">
+      <button class="chip"
+              :class="{ 'chip-active': s.id === activeId, 'chip-off': !s.enabled }"
+              @click="activeId = s.id; activeHandle = null; draw()">
+        <span x-text="s.name"></span>
+        <small class="muted" x-text="s.mesh_cols + '×' + s.mesh_rows"></small>
+      </button>
+    </template>
+    <span x-show="!surfaces.length" class="muted">
+      Sin caras todavía. El efecto se proyecta a pantalla completa, que es lo que sirve para apuntar.
+    </span>
   </div>
 
   <nav class="toolbar">
@@ -78,21 +109,6 @@
             x-text="vista === 'proyector' ? 'ver cámara' : 'ver proyector'"></button>
   </nav>
 
-  {# Tira de caras: con una superficie por cara física, saltar entre ellas tiene
-     que costar un toque. #}
-  <div class="strip">
-    <template x-for="s in surfaces" :key="s.id">
-      <button class="chip"
-              :class="{ 'chip-active': s.id === activeId, 'chip-off': !s.enabled }"
-              @click="activeId = s.id; activeHandle = null; draw()">
-        <span x-text="s.name"></span>
-        <small class="muted" x-text="s.mesh_cols + '×' + s.mesh_rows"></small>
-      </button>
-    </template>
-    <span x-show="!surfaces.length" class="muted">
-      Sin caras todavía. El efecto se proyecta a pantalla completa, que es lo que sirve para apuntar.
-    </span>
-  </div>
 
   <details class="panel">
     <summary>Efecto y control</summary>
@@ -172,5 +188,5 @@
   </details>
 </div>
 
-<script src="/static/calibrate.js"></script>
+<script src="/static/calibrate.js?v={{ status.version }}"></script>
 {% endblock %}
