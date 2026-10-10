@@ -64,14 +64,15 @@
   </li>
   {% endfor %}
 
-  {# Vacío **de esta cara**, que no es lo mismo que vacío de la escena. #}
+  {# Vacío **de esta cara**, que no es lo mismo que vacío de la escena.
+
+     Los tres casos dicen cosas distintas: sin caras no sirve «elegí una
+     cara», que fue lo que paso al borrar todo. Y va por Alpine y no por
+     Jinja porque crear una cara no recarga este fragmento: el mensaje
+     server-rendered se quedaba en pantalla contradiciendo al boton. #}
   <li class="muted sin-capas" x-show="!conCapas.includes(activeId)">
-    <span x-show="active">Esta cara no tiene capas. Agregale una abajo.</span>
-    <span x-show="!active">Elegí una cara para ver sus capas.</span>
+    <span x-show="surfaces.length && active">Esta cara no tiene capas. Agregale una abajo.</span>
+    <span x-show="surfaces.length && !active">Elegí una cara arriba para ver sus capas.</span>
   </li>
 </ol>
-
-{% if not surfaces %}
-<small class="muted">Primero hace falta una cara: creala con «+ cara» sobre el preview.</small>
-{% endif %}
 {% endif %}

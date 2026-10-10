@@ -483,3 +483,22 @@
   background: var(--pico-card-sectioning-background-color);
   font-size: 0.85rem;
 }
+
+/* Sin caras: la salida es crear una, no un formulario que no se puede usar. */
+.sin-caras {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  margin: 0.3rem 0;
+}
+
+.sin-caras button { margin: 0; width: auto; }
+
+/* Un boton deshabilitado tiene que leerse como deshabilitado: en el tema
+   oscuro, el azul apagado sobre el panel oscuro parecia un boton normal mal
+   contrastado, no uno inactivo. */
+.nueva-capa button[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

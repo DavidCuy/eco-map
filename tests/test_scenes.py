@@ -679,3 +679,34 @@ async def test_cada_capa_tiene_sus_propios_parametros(cliente):
     capas = {c["id"]: c["params"] for c in escena["layers"]}
     assert capas[a["id"]]["speed"] == 1.0
     assert capas[b["id"]]["speed"] == 9.0
+
+
+async def test_el_fragmento_no_trae_avisos_que_puedan_quedar_viejos(cliente):
+    """Regresion: «Primero hace falta una cara» se renderizaba en el servidor.
+
+    Crear una cara no recarga este fragmento —lo hace Alpine contra la API—,
+    asi que el aviso se quedaba en pantalla **contradiciendo** al boton de
+    agregar capa, que ya estaba habilitado. Lo que dependa del numero de caras
+    tiene que evaluarse en el cliente, que es quien lo sabe al instante.
+    """
+    client, _, _ = cliente
+
+    html = (await client.get("/api/scenes/panel")).text
+
+    assert "Primero hace falta una cara" not in html
+    # Los mensajes que quedan son condicionales de Alpine, no texto fijo
+    assert 'x-show="surfaces.length' in html
+
+
+async def test_sin_caras_el_dashboard_ofrece_crear_una(cliente):
+    """Con cero caras el formulario de capa queda inutil: su boton se ve
+    deshabilitado y se lee como que no existe. En vez de eso se ofrece la
+    salida, que es crear la cara."""
+    client, _, _ = cliente
+
+    html = (await client.get("/")).text
+
+    assert "crear la primera cara" in html
+    assert 'class="sin-caras"' in html
+    # Y el formulario solo aparece cuando hay caras
+    assert 'class="nueva-capa" x-show="surfaces.length"' in html

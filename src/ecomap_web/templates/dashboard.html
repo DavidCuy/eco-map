@@ -137,8 +137,17 @@
     {# El formulario también vive fuera, y al final: así los parámetros de la
        capa elegida quedan pegados a su fila y no separados por un formulario
        en el medio. De paso deja de re-renderizarse en cada acción. #}
+    {# Sin caras no hay donde poner una capa, y un formulario con el boton
+       deshabilitado se lee como que el boton no existe — paso de verdad. Se
+       cambia por una salida de un clic. #}
+    <p class="sin-caras" x-show="!surfaces.length">
+      <span>Todavía no hay caras. Una capa va siempre sobre una cara.</span>
+      <button @click="addSurface()">+ crear la primera cara</button>
+    </p>
+
     {% if scene %}
-    <form class="nueva-capa" hx-post="/api/scenes/{{ scene.id }}/layers"
+    <form class="nueva-capa" x-show="surfaces.length"
+          hx-post="/api/scenes/{{ scene.id }}/layers"
           hx-ext="json-enc" hx-target="#scenes" hx-swap="innerHTML">
       <input type="hidden" name="surface_id" :value="activeId">
       <select name="effect_id" aria-label="Efecto">
