@@ -1,13 +1,14 @@
-{# Las capas de la cara seleccionada.
+{# Las capas de la cara seleccionada, al estilo del panel de referencia:
+   la capa se **elige** y sus parámetros se abren al lado.
 
-   En el DOM están **todas** las capas de la escena, en su orden de apilado, y
-   se ocultan las que no son de la cara activa. Es a propósito: el orden es de
-   la escena entera, así que al arrastrar hay que poder mandar la lista
-   completa. Las ocultas se quedan donde están y solo se reordena lo visible,
-   que es lo que uno espera al ver una sola cara.
+   En el DOM están todas las capas de la escena, en su orden de apilado, y se
+   ocultan las que no son de la cara activa. Es a propósito: el orden es de la
+   escena entera, así que al arrastrar hay que poder mandar la lista completa.
+   Las ocultas se quedan donde están y solo se reordena lo visible.
 
-   Filtrar en el cliente y no en el servidor evita un viaje cada vez que se
-   cambia de cara, que es algo que se hace todo el tiempo al calibrar. #}
+   Filtrar en el cliente evita un viaje cada vez que se cambia de cara, que es
+   algo que se hace todo el tiempo al calibrar. Elegir una capa sí pide uno:
+   es deliberado y trae sus parámetros. #}
 
 {% set scene = scenes | selectattr('is_active') | first %}
 
@@ -18,13 +19,23 @@
   {% for layer in scene.layers %}
   <li data-id="{{ layer.id }}"
       class="{{ '' if layer.enabled else 'muted' }}"
+      :class="{ 'capa-activa': layerId === {{ layer.id }} }"
       x-show="activeId === {{ layer.surface_id }}">
     {# El tirador es lo único arrastrable: si lo fuera toda la fila, tocar un
        botón en una pantalla táctil empezaría un arrastre. #}
     <span class="tirador" aria-hidden="true" title="arrastrar para reordenar">⠿</span>
 
-    <span class="capa-nombre">{{ layer.effect_name }}</span>
-    {% if not layer.effect_available %}<small>⚠ efecto no disponible</small>{% endif %}
+    {# Seleccionar es un botón propio y no la fila entera: así el clic en el
+       blend o en «borrar» no dispara también la carga de parámetros. #}
+    <button class="capa-sel" type="button"
+            @click="layerId = {{ layer.id }}"
+            hx-get="/api/layers/{{ layer.id }}/panel"
+            hx-target="#capa-params" hx-swap="innerHTML">
+      <img class="capa-thumb" src="/api/effects/{{ layer.effect_id }}/preview"
+           alt="" loading="lazy" onerror="this.remove()">
+      <span class="capa-nombre">{{ layer.effect_name }}</span>
+      {% if not layer.effect_available %}<small>⚠ no disponible</small>{% endif %}
+    </button>
 
     <select aria-label="Modo de mezcla de {{ layer.effect_name }}"
             hx-patch="/api/layers/{{ layer.id }}"
@@ -43,7 +54,10 @@
               hx-ext="json-enc"
               hx-vals='{"enabled": {{ 'false' if layer.enabled else 'true' }}}'
               hx-target="#scenes" hx-swap="innerHTML">{{ 'ocultar' if layer.enabled else 'mostrar' }}</button>
+      {# Al borrar la capa elegida hay que soltar la selección: si no, el panel
+         de parámetros queda mostrando algo que ya no existe. #}
       <button class="outline"
+              @click="if (layerId === {{ layer.id }}) layerId = null"
               hx-delete="/api/layers/{{ layer.id }}"
               hx-target="#scenes" hx-swap="innerHTML">borrar</button>
     </span>
@@ -56,21 +70,6 @@
     <span x-show="!active">Elegí una cara para ver sus capas.</span>
   </li>
 </ol>
-
-{# La cara no se elige acá: es la que está seleccionada arriba. Un select más
-   sería pedir dos veces lo mismo. #}
-<form class="nueva-capa" hx-post="/api/scenes/{{ scene.id }}/layers"
-      hx-ext="json-enc" hx-target="#scenes" hx-swap="innerHTML">
-  <input type="hidden" name="surface_id" :value="activeId">
-  <select name="effect_id" aria-label="Efecto">
-    {% for e in effects %}{% if e.available %}<option value="{{ e.id }}">{{ e.name }}</option>{% endif %}{% endfor %}
-  </select>
-  <select name="blend_mode" aria-label="Modo de mezcla">
-    {% for modo in ['normal', 'add', 'multiply', 'screen'] %}<option value="{{ modo }}">{{ modo }}</option>{% endfor %}
-  </select>
-  <button type="submit" :disabled="!activeId"
-          x-text="active ? '+ capa en ' + active.name : '+ capa'"></button>
-</form>
 
 {% if not surfaces %}
 <small class="muted">Primero hace falta una cara: creala con «+ cara» sobre el preview.</small>

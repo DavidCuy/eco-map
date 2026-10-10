@@ -548,3 +548,134 @@ async def test_un_orden_incompleto_se_rechaza(cliente):
     )
 
     assert respuesta.status_code == 422
+
+
+# --- parametros por capa --------------------------------------------------
+#
+# Hasta ahora los unicos sliders del dashboard eran los del efecto global, que
+# ni siquiera se proyecta cuando la escena tiene capas: cada capa corria con
+# los valores por defecto y no habia forma de cambiarlos, aunque la base los
+# guardaba y la API los aceptaba.
+
+
+async def _una_capa(client, efecto: str = "waves") -> dict:
+    surface_id, scene_id = await _montar(client)
+    return (
+        await client.post(
+            f"/api/scenes/{scene_id}/layers",
+            json={"surface_id": surface_id, "effect_id": efecto},
+        )
+    ).json()
+
+
+async def test_el_panel_de_una_capa_trae_los_controles_de_su_efecto(cliente):
+    """Se generan desde el manifiesto, igual que los del efecto global: un
+    efecto con un parametro nuevo aparece sin tocar el frontend."""
+    client, _, _ = cliente
+    capa = await _una_capa(client)
+
+    html = (await client.get(f"/api/layers/{capa['id']}/panel")).text
+
+    assert f'data-params-url="/api/layers/{capa["id"]}/params"' in html
+    assert 'data-param="speed"' in html
+    # La miniatura del efecto, que es como se identifica la capa de un vistazo
+    assert f'/api/effects/{capa["effect_id"]}/preview' in html
+
+
+async def test_el_panel_de_una_capa_que_no_existe_da_404(cliente):
+    client, _, _ = cliente
+    assert (await client.get("/api/layers/999/panel")).status_code == 404
+
+
+async def test_cambiar_un_parametro_de_capa_no_pisa_los_otros(cliente):
+    """Mezcla parcial: mover un slider no puede resetear el resto."""
+    client, app, _ = cliente
+    capa = await _una_capa(client)
+
+    await client.put(f"/api/layers/{capa['id']}/params", json={"params": {"speed": 2.5}})
+    await client.put(f"/api/layers/{capa['id']}/params", json={"params": {"scale": 12.0}})
+
+    # La escritura esta diferida: sin volcarla, la base todavia no los tiene.
+    await app.state.writer.flush()
+    capas = (await client.get(f"/api/scenes/{capa['scene_id']}")).json()["layers"]
+    assert capas[0]["params"] == {"speed": 2.5, "scale": 12.0}
+
+
+async def test_el_parametro_viaja_al_render_antes_de_escribirse_en_disco(cliente):
+    """Lo que se ve viaja siempre; lo que se guarda se difiere (ADR-004).
+
+    Si la escena que se le manda al render se armara solo desde la base, el
+    render recibiria el valor viejo hasta que la escritura diferida se volcara
+    medio segundo despues: el slider se moveria y la proyeccion no.
+    """
+    client, app, enviados = cliente
+    capa = await _una_capa(client)
+    enviados.clear()
+
+    await client.put(f"/api/layers/{capa['id']}/params", json={"params": {"speed": 4.0}})
+
+    escena = [m for m in enviados if m.get("op") == "scene"][-1]["scene"]
+    assert escena["layers"][0]["params"]["speed"] == 4.0
+    # Y todavia no toco la base
+    assert app.state.app_state.layer_params[capa["id"]] == {"speed": 4.0}
+
+
+async def test_muchos_cambios_seguidos_terminan_en_una_sola_escritura(cliente):
+    """Un arrastre genera decenas de valores por segundo. En la Pi la SD es la
+    causa numero uno de muerte, asi que las escrituras se agrupan."""
+    client, app, _ = cliente
+    capa = await _una_capa(client)
+    writer = app.state.writer
+    antes = writer.writes
+
+    for valor in range(10):
+        await client.put(
+            f"/api/layers/{capa['id']}/params", json={"params": {"speed": float(valor)}}
+        )
+
+    assert writer.writes == antes, "no deberia haber escrito todavia"
+    await writer.flush()
+    assert writer.writes - antes == 1, "diez cambios, una sola escritura"
+
+    capas = (await client.get(f"/api/scenes/{capa['scene_id']}")).json()["layers"]
+    assert capas[0]["params"]["speed"] == 9.0, "el ultimo valor no se pierde"
+
+
+async def test_restaurar_descarta_los_overrides(cliente):
+    """Se descartan, no se copian los defaults: asi la capa sigue heredando si
+    el efecto cambia de version (ADR-011)."""
+    client, _, _ = cliente
+    capa = await _una_capa(client)
+    await client.put(f"/api/layers/{capa['id']}/params", json={"params": {"speed": 7.0}})
+
+    await client.post(f"/api/layers/{capa['id']}/params/reset")
+
+    capas = (await client.get(f"/api/scenes/{capa['scene_id']}")).json()["layers"]
+    assert capas[0]["params"] == {}
+
+
+async def test_cada_capa_tiene_sus_propios_parametros(cliente):
+    """Dos capas del mismo efecto sobre la misma cara no comparten valores."""
+    client, app, _ = cliente
+    surface_id, scene_id = await _montar(client)
+    a = (
+        await client.post(
+            f"/api/scenes/{scene_id}/layers",
+            json={"surface_id": surface_id, "effect_id": "waves"},
+        )
+    ).json()
+    b = (
+        await client.post(
+            f"/api/scenes/{scene_id}/layers",
+            json={"surface_id": surface_id, "effect_id": "waves"},
+        )
+    ).json()
+
+    await client.put(f"/api/layers/{a['id']}/params", json={"params": {"speed": 1.0}})
+    await client.put(f"/api/layers/{b['id']}/params", json={"params": {"speed": 9.0}})
+
+    await app.state.writer.flush()
+    escena = (await client.get(f"/api/scenes/{scene_id}")).json()
+    capas = {c["id"]: c["params"] for c in escena["layers"]}
+    assert capas[a["id"]]["speed"] == 1.0
+    assert capas[b["id"]]["speed"] == 9.0

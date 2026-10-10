@@ -13,12 +13,13 @@ from ecomap_core.schemas import (
     LayerCreate,
     LayerOut,
     LayerUpdate,
+    ParamsIn,
     ReorderIn,
     SceneCreate,
     SceneOut,
     SceneUpdate,
 )
-from ecomap_web.deps import BusDep, DbDep, StateDep
+from ecomap_web.deps import BusDep, DbDep, StateDep, WriterDep
 from ecomap_web.routers.pages import render_fragment
 from ecomap_web.services import scenes as service
 from ecomap_web.services import surfaces as surface_service
@@ -178,6 +179,91 @@ async def actualizar_capa(
         raise _capa_no_encontrada(layer_id) from exc
     await service.push(bus, db)
     return _salida(request, db, state, capa)
+
+
+@router.get("/api/layers/{layer_id}/panel", response_class=HTMLResponse)
+def panel_de_capa(layer_id: int, request: Request, db: DbDep, state: StateDep) -> Response:
+    """Los parametros de **esa** capa, para el panel de la derecha.
+
+    Se piden al seleccionar y no se renderizan todos de entrada: con varias
+    capas serian decenas de sliders en el DOM, casi todos invisibles. Elegir
+    una capa es una accion deliberada, asi que un viaje esta bien; cambiar de
+    cara no, y por eso ese filtro vive en el cliente.
+    """
+    from ecomap_web.routers.effects import catalogo
+
+    try:
+        capa = service.obtener_capa(db, layer_id)
+    except service.LayerNotFound as exc:
+        raise _capa_no_encontrada(layer_id) from exc
+
+    # `catalogo` devuelve modelos, no diccionarios: se accede por atributo.
+    efecto = next((e for e in catalogo(db, state) if e.id == capa["effect_id"]), None)
+    return render_fragment(
+        request,
+        "partials/layer_params.html",
+        {
+            "layer": capa,
+            "effect": efecto,
+            # Lo guardado mezclado con lo que todavia no se escribio: si no, al
+            # reabrir el panel a mitad de un arrastre los sliders saltarian al
+            # valor viejo.
+            "values": {**capa["params"], **state.layer_params.get(layer_id, {})},
+        },
+    )
+
+
+@router.put("/api/layers/{layer_id}/params", response_model=LayerOut)
+async def params_de_capa(
+    layer_id: int,
+    payload: ParamsIn,
+    db: DbDep,
+    bus: BusDep,
+    state: StateDep,
+    writer: WriterDep,
+) -> dict:
+    """Mezcla parcial de parametros, con escritura diferida.
+
+    El valor viaja al render enseguida porque es lo que se ve; la escritura a
+    SQLite se agrupa, que en un arrastre son decenas de UPDATE sobre la misma
+    fila y en la Pi la SD es la causa numero uno de muerte (ADR-004).
+    """
+    try:
+        service.obtener_capa(db, layer_id)
+    except service.LayerNotFound as exc:
+        raise _capa_no_encontrada(layer_id) from exc
+
+    acumulado = {**state.layer_params.get(layer_id, {}), **payload.params}
+    state.layer_params[layer_id] = acumulado
+
+    def volcar() -> None:
+        service.actualizar_capa(db, layer_id, {"params": acumulado})
+        # Ya esta en disco: deja de ser un pendiente.
+        if state.layer_params.get(layer_id) == acumulado:
+            state.layer_params.pop(layer_id, None)
+
+    writer.schedule(f"layer_params:{layer_id}", volcar)
+    await service.push(bus, db, state.layer_params)
+    return {**service.obtener_capa(db, layer_id), "params": acumulado}
+
+
+@router.post("/api/layers/{layer_id}/params/reset", response_class=HTMLResponse)
+async def resetear_params_de_capa(
+    layer_id: int, request: Request, db: DbDep, bus: BusDep, state: StateDep
+) -> Response:
+    """Vuelve a los valores por defecto del manifiesto.
+
+    Se **descartan los overrides**, no se copian los defaults: asi la capa
+    sigue heredando si el efecto cambia de version (ADR-011). Mismo criterio
+    que con el efecto global.
+    """
+    try:
+        service.actualizar_capa(db, layer_id, {"params": {}, "_reemplazar_params": True})
+    except service.LayerNotFound as exc:
+        raise _capa_no_encontrada(layer_id) from exc
+    state.layer_params.pop(layer_id, None)
+    await service.push(bus, db, state.layer_params)
+    return panel_de_capa(layer_id, request, db, state)
 
 
 @router.delete("/api/layers/{layer_id}", status_code=status.HTTP_204_NO_CONTENT)

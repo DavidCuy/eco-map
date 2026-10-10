@@ -17,6 +17,9 @@ function workspace(config) {
     surfaces: config.surfaces || [],
     activeId: null,
     activeHandle: null,
+    // Capa elegida: sus parametros ocupan el panel de abajo. Vive en el
+    // cliente porque el servidor no tiene por que saber que estas mirando.
+    layerId: null,
     status: config.status,
     ws: false,
     saving: false,

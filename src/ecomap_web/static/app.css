@@ -281,7 +281,68 @@
   margin-bottom: 0.25rem;
 }
 
-.layers .capa-nombre { flex: 1; min-width: 6rem; }
+/* Seleccionar la capa: miniatura + nombre, como en el panel de referencia.
+   Identificar por imagen es mas rapido que leer, y la miniatura ya existe
+   —la genera cada efecto— solo que hasta ahora se usaba solo en el catalogo. */
+.capa-sel {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 6rem;
+  margin: 0;
+  padding: 0.15rem 0.3rem;
+  width: auto;
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.capa-thumb {
+  width: 2.4rem;
+  height: 1.5rem;
+  object-fit: cover;
+  border-radius: calc(var(--pico-border-radius) / 2);
+  background: #000;
+  flex: 0 0 auto;
+}
+
+.layers .capa-nombre { flex: 1; min-width: 4rem; }
+
+/* La capa elegida: su borde se corresponde con el panel de parametros que se
+   abre abajo. Sin esto no hay forma de saber de cual son los sliders. */
+.layers li.capa-activa {
+  border-left: 3px solid var(--ecomap-accent);
+  padding-left: calc(0.5rem - 3px);
+}
+
+/* --- parametros de la capa elegida --- */
+
+.capa-params {
+  margin-top: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--pico-border-radius);
+  background: var(--pico-card-sectioning-background-color);
+  border-left: 3px solid var(--ecomap-accent);
+}
+
+.capa-params header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.capa-params header span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.capa-params button { margin: 0.4rem 0 0; width: auto; }
 .layers .sin-capas { background: none; }
 
 /* Solo el tirador arrastra: si lo hiciera toda la fila, tocar un botón en
