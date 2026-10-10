@@ -50,6 +50,13 @@ class Settings(BaseSettings):
         default=Path("/media"),
         validation_alias=AliasChoices("ECOMAP_MEDIA_DIR", "ECOMAP_MEDIA"),
     )
+    # Escenas guardadas como archivos. Junto a la base y no en su propio
+    # volumen: son datos del operador, y conviene que un respaldo de /data se
+    # los lleve tambien.
+    scenes_dir: Path = Field(
+        default=Path("/data/scenes"),
+        validation_alias=AliasChoices("ECOMAP_SCENES_DIR", "ECOMAP_SCENES"),
+    )
     migrations_dir: Path = Field(
         default=Path("migrations"),
         validation_alias=AliasChoices("ECOMAP_MIGRATIONS_DIR", "ECOMAP_MIGRATIONS"),

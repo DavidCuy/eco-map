@@ -32,7 +32,7 @@
      calibradas parece que el warp esta roto. Se dice. #}
   <p class="aviso">
     Proyectando <strong>a pantalla completa</strong>: hay caras calibradas pero ninguna capa las usa.
-    Agregá una capa en <em>Escenas y capas</em> para que el efecto se deforme sobre ellas.
+    Agregá una capa en <em>Capas de la escena actual</em> para que el efecto se deforme sobre ellas.
   </p>
   {% endif %}
 
@@ -118,9 +118,18 @@
   </details>
 
   <details class="panel" open>
-    <summary>Escenas y capas</summary>
+    <summary>Capas de la escena actual</summary>
     <div id="scenes">
       {% include "partials/scenes.html" %}
+    </div>
+  </details>
+
+  {# Escenas guardadas: documentos, no filas. Lo que se está tocando ya es la
+     escena; esto es para quedarse con una copia y volver a ella. #}
+  <details class="panel">
+    <summary>Escenas guardadas</summary>
+    <div id="snapshots">
+      {% include "partials/snapshots.html" %}
     </div>
   </details>
 

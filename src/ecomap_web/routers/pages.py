@@ -46,6 +46,7 @@ def dashboard(
     from ecomap_web.routers.camera import devices_out
     from ecomap_web.routers.effects import catalogo, contexto_controles
     from ecomap_web.services import scenes as scene_service
+    from ecomap_web.services import snapshots as snapshot_service
     from ecomap_web.services import surfaces as surface_service
 
     status = build_status(bus, state, request.app.state.version)
@@ -83,6 +84,10 @@ def dashboard(
             "camera_stream": f"{preview_url}camera",
             "effects": catalogo(db, state),
             "scenes": scene_service.listar(db),
+            "snapshots": snapshot_service.listar_archivos(settings.scenes_dir),
+            "scene": next(
+                (e for e in scene_service.listar(db) if e["is_active"]), None
+            ),
             "surfaces": surface_service.listar(db),
             # Sin capas el efecto va a pantalla completa, que es intencional y
             # util para apuntar el proyector. El problema es que, con caras ya

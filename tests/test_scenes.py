@@ -46,10 +46,16 @@ async def cliente(tmp_path: Path):
 
 
 async def _montar(client) -> tuple[int, int]:
-    """Una cara y una escena, que es el minimo para tener una capa."""
+    """Una cara y la escena **activa**, que es el minimo para tener una capa.
+
+    Se renombra la que ya existe en vez de crear otra: el arranque deja una
+    escena de trabajo activa, y una creada despues queda inactiva — sus capas
+    no se proyectan y no aparecen en lo que se le manda al render.
+    """
     surface_id = (await client.post("/api/surfaces", json={"name": "frontal"})).json()["id"]
-    scene_id = (await client.post("/api/scenes", json={"name": "principal"})).json()["id"]
-    return surface_id, scene_id
+    activa = next(e for e in (await client.get("/api/scenes")).json() if e["is_active"])
+    await client.patch(f"/api/scenes/{activa['id']}", json={"name": "principal"})
+    return surface_id, activa["id"]
 
 
 def _ultima_escena(enviados: list[dict]) -> dict:
@@ -59,13 +65,23 @@ def _ultima_escena(enviados: list[dict]) -> dict:
 # --- escenas -------------------------------------------------------------
 
 
-async def test_la_primera_escena_queda_activa(cliente):
-    """Si no, se podrian crear escenas y no proyectar nada."""
+async def test_siempre_hay_exactamente_una_escena_activa(cliente):
+    """Si no, se podrian crear escenas y no proyectar nada.
+
+    La primera la crea el arranque: un equipo recien instalado ya tiene escena
+    de trabajo, porque al sacar el boton "+ escena" de la UI no quedaba forma
+    de crear una. Lo que se comprueba es la invariante: una activa, siempre.
+    """
     client, _, _ = cliente
 
-    escena = (await client.post("/api/scenes", json={"name": "principal"})).json()
+    def activas(escenas):
+        return [e for e in escenas if e["is_active"]]
 
-    assert escena["is_active"] is True
+    assert len(activas((await client.get("/api/scenes")).json())) == 1
+
+    await client.post("/api/scenes", json={"name": "principal"})
+
+    assert len(activas((await client.get("/api/scenes")).json())) == 1
 
 
 async def test_activar_una_escena_cambia_lo_que_se_proyecta(cliente):
@@ -115,13 +131,16 @@ async def test_marcar_default_es_excluyente(cliente):
 
 async def test_borrar_la_escena_activa_pasa_a_otra(cliente):
     client, _, _ = cliente
+    # La activa es la que creo el arranque: se activa otra a proposito para
+    # que el borrado sea el de la que esta proyectando.
     primera = (await client.post("/api/scenes", json={"name": "a"})).json()["id"]
+    await client.post(f"/api/scenes/{primera}/activate")
     await client.post("/api/scenes", json={"name": "b"})
 
     await client.delete(f"/api/scenes/{primera}")
 
     activas = [e for e in (await client.get("/api/scenes")).json() if e["is_active"]]
-    assert len(activas) == 1 and activas[0]["name"] == "b"
+    assert len(activas) == 1 and activas[0]["name"] != "a"
 
 
 async def test_borrar_escena_borra_sus_capas(cliente):
@@ -379,7 +398,11 @@ async def test_la_ui_avisa_cuando_proyecta_a_pantalla_completa(cliente):
     desarrollo: hay que decirlo, no dejarlo adivinar."""
     client, _, _ = cliente
     await client.post("/api/surfaces", json={"name": "frontal"})
-    scene_id = (await client.post("/api/scenes", json={"name": "principal"})).json()["id"]
+    # La capa va en la escena **activa**: una creada aparte no se proyecta, y
+    # el aviso seguiria siendo correcto.
+    scene_id = next(
+        e["id"] for e in (await client.get("/api/scenes")).json() if e["is_active"]
+    )
 
     html = (await client.get("/")).text
     assert "ninguna capa las usa" in html

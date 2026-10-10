@@ -288,3 +288,77 @@
 
 .motion-live { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; font-size: 0.85rem; }
 .motion-live progress { width: 120px; margin: 0; }
+
+/* --- escenas guardadas --- */
+
+.guardar-escena,
+.subir-escena {
+  display: flex;
+  gap: 0.4rem;
+  align-items: flex-end;
+  margin-bottom: 0.6rem;
+}
+
+.guardar-escena input,
+.subir-escena label,
+.subir-escena input {
+  margin: 0;
+}
+
+.guardar-escena button,
+.subir-escena button {
+  margin: 0;
+  width: auto;
+  white-space: nowrap;
+}
+
+.subir-escena { margin-top: 0.8rem; }
+.subir-escena label { flex: 1; }
+
+.lista-escenas {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.6rem;
+}
+
+.lista-escenas li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--pico-border-radius);
+  background: var(--pico-card-background-color);
+  margin-bottom: 0.3rem;
+}
+
+.lista-escenas .nombre {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.lista-escenas .acciones {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.lista-escenas .acciones button,
+.lista-escenas .acciones [role="button"] {
+  margin: 0;
+  width: auto;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.8rem;
+}
+
+/* El aviso de la última acción: qué se guardó, qué se abrió, qué se omitió.
+   Sin esto, abrir una escena no da ninguna señal de haber hecho algo. */
+.snapshots .aviso {
+  margin: 0 0 0.6rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: var(--pico-border-radius);
+  background: var(--pico-card-sectioning-background-color);
+  font-size: 0.85rem;
+}

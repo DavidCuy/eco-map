@@ -179,6 +179,12 @@ class CalibrationOut(BaseModel):
     created_at: str | None = None
 
 
+class SnapshotSave(BaseModel):
+    """Guardar la instalacion actual con un nombre."""
+
+    name: str = Field(min_length=1, max_length=60)
+
+
 class CameraSelectRequest(BaseModel):
     source: str = Field(
         description="URI de la camara: fake:// o v4l2:///dev/v4l/by-id/...",
