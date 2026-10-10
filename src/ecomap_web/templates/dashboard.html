@@ -73,14 +73,21 @@
   {# Tira de caras, debajo del canvas: como solo se dibuja la cara activa,
      elegir cuál es el primer paso y no el último. Con una superficie por cara
      física, saltar entre ellas tiene que costar un toque. #}
-  <div class="strip">
+  <div class="strip" x-ref="strip">
     <template x-for="s in surfaces" :key="s.id">
-      <button class="chip"
-              :class="{ 'chip-active': s.id === activeId, 'chip-off': !s.enabled }"
-              @click="activeId = s.id; activeHandle = null; draw()">
-        <span x-text="s.name"></span>
-        <small class="muted" x-text="s.mesh_cols + '×' + s.mesh_rows"></small>
-      </button>
+      {# Un div y no un button: adentro va el tirador, y un botón dentro de
+         otro botón no es HTML válido. El rol y el teclado se declaran a mano. #}
+      <div class="chip" role="button" tabindex="0" :data-id="s.id"
+           :class="{ 'chip-active': s.id === activeId, 'chip-off': !s.enabled }"
+           @click="activeId = s.id; activeHandle = null; draw()"
+           @keydown.enter="activeId = s.id; activeHandle = null; draw()"
+           @keydown.space.prevent="activeId = s.id; activeHandle = null; draw()">
+        <span class="tirador" aria-hidden="true" title="arrastrar para reordenar">⠿</span>
+        <span class="chip-texto">
+          <span x-text="s.name"></span>
+          <small class="muted" x-text="s.mesh_cols + '×' + s.mesh_rows"></small>
+        </span>
+      </div>
     </template>
     <span x-show="!surfaces.length" class="muted">
       Sin caras todavía. El efecto se proyecta a pantalla completa, que es lo que sirve para apuntar.

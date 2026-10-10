@@ -23,6 +23,10 @@ from ecomap_web.db import get_setting, set_setting
 from ecomap_web.repo import surfaces as repo
 
 
+class InvalidOrder(ValueError):
+    """El reordenamiento no coincide con las caras que existen."""
+
+
 class SurfaceNotFound(LookupError):
     pass
 
@@ -97,6 +101,22 @@ def resetear(conn: sqlite3.Connection, surface_id: int) -> dict[str, Any]:
     repo.guardar_malla(conn, surface_id, default_mesh(cols, rows), cols, rows, kind_for(cols, rows))
     _bump_calibration(conn)
     return obtener(conn, surface_id)
+
+
+def reordenar(conn: sqlite3.Connection, surface_ids: list[int]) -> list[dict[str, Any]]:
+    """Cambia el orden de la tira de caras.
+
+    No toca el render: el apilado lo decide el z_order de las capas. Esto es
+    navegacion — con el canvas mostrando una cara por vez, poder ordenarlas
+    como estan fisicamente es la diferencia entre buscar y señalar.
+    """
+    actuales = {s["id"] for s in listar(conn)}
+    if set(surface_ids) != actuales:
+        raise InvalidOrder(
+            "el reordenamiento tiene que incluir exactamente las caras que existen"
+        )
+    repo.reordenar(conn, surface_ids)
+    return listar(conn)
 
 
 def borrar(conn: sqlite3.Connection, surface_id: int) -> None:

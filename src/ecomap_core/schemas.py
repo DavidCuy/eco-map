@@ -221,6 +221,12 @@ class SubdivideIn(BaseModel):
     rows: int = Field(ge=1, le=32)
 
 
+class SurfaceReorder(BaseModel):
+    """Ids de cara en el orden en que deben aparecer en la tira."""
+
+    surface_ids: list[int] = Field(min_length=1)
+
+
 class SurfaceOut(BaseModel):
     id: int
     name: str
@@ -230,6 +236,9 @@ class SurfaceOut(BaseModel):
     points: list[Punto]
     opacity: float
     enabled: bool
+    # Orden en la tira de caras. Es navegacion, no render: el apilado lo
+    # decide el z_order de las capas.
+    position: int = 0
     updated_at: str
 
 

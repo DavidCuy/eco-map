@@ -130,6 +130,7 @@ function workspace(config) {
       // El orden de las capas se cambia arrastrando. Hay que volver a
       // engancharlo después de cada swap de HTMX: el <ol> es nuevo cada vez.
       this.engancharOrden();
+      this.engancharOrdenCaras();
       document.body.addEventListener('htmx:afterSwap', () => this.engancharOrden());
     },
 
@@ -161,6 +162,9 @@ function workspace(config) {
       if (lista._sortable) lista._sortable.destroy();
 
       lista._sortable = Sortable.create(lista, {
+        // Solo las capas: el <li> del mensaje "esta cara no tiene capas" no
+        // es arrastrable ni sirve de destino.
+        draggable: 'li[data-id]',
         handle: '.tirador',
         animation: 150,
         ghostClass: 'arrastrando',
@@ -191,6 +195,58 @@ function workspace(config) {
         // El servidor manda; si rechazó el orden, se recarga el fragmento
         // para no dejar la pantalla mintiendo.
         if (window.htmx) htmx.ajax('GET', '/api/scenes/panel', '#scenes');
+      }
+    },
+
+    // --- orden de las caras ---
+    //
+    // La tira es la navegacion entre caras: el canvas muestra una por vez.
+    // Poder ordenarlas como estan fisicamente —de izquierda a derecha segun
+    // se ve el objeto— es la diferencia entre buscar y señalar.
+    //
+    // No cambia lo que se proyecta: el apilado lo decide el z_order de las
+    // capas. Por eso no se le avisa al render.
+
+    engancharOrdenCaras() {
+      const tira = this.$refs.strip;
+      if (!tira || typeof Sortable === 'undefined') return;
+
+      Sortable.create(tira, {
+        // Los chips los genera un `x-for`, que deja su <template> como primer
+        // hijo. Sin esto, Sortable lo trataria como un elemento mas.
+        draggable: '[data-id]',
+        handle: '.tirador',
+        animation: 150,
+        ghostClass: 'arrastrando',
+        forceFallback: true,
+        delay: 120,
+        delayOnTouchOnly: true,
+        onEnd: (evt) => this.guardarOrdenCaras(tira, evt),
+      });
+    },
+
+    async guardarOrdenCaras(tira, evt) {
+      if (evt.oldIndex === evt.newIndex) return;
+      const previo = [...this.surfaces];
+      const ids = [...tira.querySelectorAll('[data-id]')].map((el) => Number(el.dataset.id));
+      if (ids.length !== previo.length) return;
+
+      // Se deshace el movimiento de Sortable **antes** de tocar el array, y
+      // moviendo un solo nodo: la inversa exacta de lo que hizo.
+      //
+      // Los chips los pinta un `x-for`. Si el DOM se mueve por un lado y el
+      // array por el otro, Alpine reordena sobre lo ya movido y la tira
+      // termina como estaba, o peor: reusa mal sus nodos y deja uno vacio.
+      // El array manda; el DOM lo pinta Alpine.
+      const sinItem = [...tira.querySelectorAll('[data-id]')].filter((el) => el !== evt.item);
+      tira.insertBefore(evt.item, sinItem[evt.oldIndex] || null);
+
+      this.surfaces = ids.map((id) => previo.find((s) => s.id === id)).filter(Boolean);
+
+      try {
+        await this.api('PUT', '/api/surfaces/order', { surface_ids: ids });
+      } catch (e) {
+        this.surfaces = previo;
       }
     },
 
