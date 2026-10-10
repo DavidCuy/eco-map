@@ -15,8 +15,48 @@ function catalogo() {
     angle: 0,
     subiendo: false,
     error: null,
+    aviso: null,
     _imagen: null,
     _animacion: null,
+
+    // --- acciones sobre el catálogo ---
+
+    async probar(id, nombre) {
+      // Manda el efecto al proyector a pantalla completa. No reemplaza nada
+      // de esta pantalla, así que no hay fragmento que intercambiar: por eso
+      // va por fetch y no por HTMX.
+      this.aviso = null;
+      this.error = null;
+      try {
+        const res = await fetch('/api/effects/active', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id }),
+        });
+        if (!res.ok) throw new Error((await res.json()).detail || `error ${res.status}`);
+        this.aviso = `Proyectando «${nombre}» a pantalla completa. Si la escena tiene capas, ` +
+                     'no se ve hasta quitarlas.';
+      } catch (e) {
+        this.error = e.message;
+      }
+    },
+
+    async borrar(id, nombre) {
+      if (!confirm(`¿Borrar «${nombre}»? Se borra el archivo. Las capas que lo usen no se ` +
+                   'borran: quedan marcadas como no disponibles.')) return;
+      this.aviso = null;
+      this.error = null;
+      try {
+        const res = await fetch(`/api/effects/${id}/upload`, { method: 'DELETE' });
+        if (!res.ok) throw new Error((await res.json()).detail || `error ${res.status}`);
+        this.aviso = `«${nombre}» borrado.`;
+        // Se repinta el catálogo desde el servidor: es él quien sabe qué
+        // quedó, sobre todo si el efecto seguía referenciado por una capa.
+        htmx.ajax('POST', '/api/effects/reload', '#catalog');
+      } catch (e) {
+        this.error = e.message;
+      }
+    },
 
     elegir(evento) {
       const archivo = evento.target.files[0];

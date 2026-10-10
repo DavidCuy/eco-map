@@ -556,3 +556,18 @@
   padding: 0.4rem 0.6rem;
   font-size: 0.8rem;
 }
+
+.acciones-efecto {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-top: auto;
+}
+
+.acciones-efecto button {
+  margin: 0;
+  width: auto;
+  flex: 1 1 auto;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8rem;
+}

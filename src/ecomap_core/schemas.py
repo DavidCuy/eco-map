@@ -86,6 +86,10 @@ class EffectOut(BaseModel):
     cost: str = "low"
     params: list[EffectParamOut] = []
     available: bool = True
+    # "image", "gif" o "video" si el efecto se creo subiendo un archivo; None
+    # si vino con el sistema. Es lo que decide si se puede borrar desde la
+    # web: volver a tener uno del sistema significaria reinstalar.
+    source_kind: str | None = None
     # `available` dice que el manifiesto es valido y el directorio existe;
     # `compiled`, que el shader pasa el compilador de **este** driver. Un efecto
     # puede estar perfecto en disco y no compilar en la Pi.

@@ -146,11 +146,26 @@ async def borrar_subido(
     el mismo camino que ya existia, y borrar capas de escenas guardadas por
     quitar un efecto seria una sorpresa desagradable.
     """
-    try:
-        media_service.borrar(settings.effects_dir, effect_id)
-    except media_service.MediaEffectError as exc:
-        raise HTTPException(HTTP_422, str(exc)) from exc
+    # Se decide por el espejo y no por el disco: un efecto subido cuyo
+    # directorio ya no esta tiene que poder sacarse del catalogo igual.
+    if service.fuente_de(db, effect_id) is None:
+        raise HTTPException(
+            HTTP_422,
+            f"«{effect_id}» no se creo subiendo un archivo: los que vienen con el "
+            "sistema no se borran desde la web, porque volver a tenerlos "
+            "significaria reinstalar.",
+        )
+
+    if (settings.effects_dir / effect_id).is_dir():
+        try:
+            media_service.borrar(settings.effects_dir, effect_id)
+        except media_service.MediaEffectError as exc:
+            raise HTTPException(HTTP_422, str(exc)) from exc
+
     await _resincronizar(db, bus, state, settings)
+    # Despues de resincronizar, para que el espejo ya lo tenga como no
+    # disponible y el conteo de capas sea el real.
+    service.olvidar(db, effect_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

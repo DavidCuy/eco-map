@@ -313,3 +313,141 @@ async def test_la_pagina_de_efectos_responde(cliente):
     assert "Agregar un efecto" in respuesta.text
     # Y el dashboard ya no lo lleva adentro
     assert "Catálogo de efectos" not in (await client.get("/")).text
+
+
+# --- borrar desde el catalogo -------------------------------------------
+
+
+async def test_el_catalogo_dice_cuales_salieron_de_un_archivo(cliente):
+    """Es lo que decide si se puede borrar desde la web."""
+    client, efectos, tmp = cliente
+    (efectos / "nativo").mkdir()
+    (efectos / "nativo" / "effect.json").write_text(
+        '{"id": "nativo", "name": "Nativo", "version": "1.0.0"}'
+    )
+    (efectos / "nativo" / "frag.glsl").write_text("vec3 effect(vec2 uv){return vec3(1.0);}")
+    await client.post(
+        "/api/effects/upload",
+        files={"archivo": ("s.png", _imagen(tmp / "s.png").read_bytes(), "image/png")},
+        data={"nombre": "subido"},
+    )
+    await client.post("/api/effects/reload")
+
+    por_id = {e["id"]: e for e in (await client.get("/api/effects")).json()}
+
+    assert por_id["subido"]["source_kind"] == "image"
+    assert por_id["nativo"]["source_kind"] is None
+
+
+async def test_un_efecto_del_sistema_no_se_borra_por_la_api(cliente):
+    client, efectos, _ = cliente
+    (efectos / "nativo").mkdir()
+    (efectos / "nativo" / "effect.json").write_text(
+        '{"id": "nativo", "name": "Nativo", "version": "1.0.0"}'
+    )
+    (efectos / "nativo" / "frag.glsl").write_text("vec3 effect(vec2 uv){return vec3(1.0);}")
+    await client.post("/api/effects/reload")
+
+    respuesta = await client.delete("/api/effects/nativo/upload")
+
+    assert respuesta.status_code == 422
+    assert "vienen con el sistema" in respuesta.text
+    assert (efectos / "nativo").exists()
+
+
+async def test_borrar_saca_el_efecto_del_catalogo(cliente):
+    """Sin esto quedaria para siempre como «no disponible»: basura que se
+    acumula cada vez que se prueba y se descarta un efecto subido."""
+    client, _, tmp = cliente
+    await client.post(
+        "/api/effects/upload",
+        files={"archivo": ("z.png", _imagen(tmp / "z.png").read_bytes(), "image/png")},
+        data={"nombre": "efimero"},
+    )
+    assert any(e["id"] == "efimero" for e in (await client.get("/api/effects")).json())
+
+    assert (await client.delete("/api/effects/efimero/upload")).status_code == 204
+
+    assert not any(e["id"] == "efimero" for e in (await client.get("/api/effects")).json())
+
+
+async def test_un_efecto_en_uso_se_queda_en_el_catalogo_como_no_disponible(cliente):
+    """La capa lo referencia: sacarlo del espejo la dejaria apuntando a nada.
+    Es la regla del ADR-011, y solo se relaja cuando no lo usa nadie."""
+    client, _, tmp = cliente
+    await client.post(
+        "/api/effects/upload",
+        files={"archivo": ("w.png", _imagen(tmp / "w.png").read_bytes(), "image/png")},
+        data={"nombre": "en uso"},
+    )
+    cara = (await client.post("/api/surfaces", json={"name": "c"})).json()
+    escena = next(e for e in (await client.get("/api/scenes")).json() if e["is_active"])
+    await client.post(
+        f"/api/scenes/{escena['id']}/layers",
+        json={"surface_id": cara["id"], "effect_id": "en_uso"},
+    )
+
+    await client.delete("/api/effects/en_uso/upload")
+
+    catalogo = {e["id"]: e for e in (await client.get("/api/effects")).json()}
+    assert catalogo["en_uso"]["available"] is False, "sigue, pero marcado"
+    capas = (await client.get(f"/api/scenes/{escena['id']}")).json()["layers"]
+    assert len(capas) == 1 and capas[0]["effect_available"] is False
+
+
+async def test_una_entrada_fantasma_se_puede_limpiar(cliente):
+    """El directorio ya no esta pero el espejo si: pasa al borrar efectos a
+    mano del volumen. Tiene que poder sacarse del catalogo igual."""
+    client, efectos, tmp = cliente
+    await client.post(
+        "/api/effects/upload",
+        files={"archivo": ("f.png", _imagen(tmp / "f.png").read_bytes(), "image/png")},
+        data={"nombre": "fantasma"},
+    )
+    import shutil
+
+    shutil.rmtree(efectos / "fantasma")
+    await client.post("/api/effects/reload")
+    assert any(e["id"] == "fantasma" for e in (await client.get("/api/effects")).json())
+
+    assert (await client.delete("/api/effects/fantasma/upload")).status_code == 204
+
+    assert not any(e["id"] == "fantasma" for e in (await client.get("/api/effects")).json())
+
+
+async def test_el_catalogo_solo_ofrece_borrar_los_subidos(cliente):
+    client, efectos, tmp = cliente
+    (efectos / "nativo").mkdir()
+    (efectos / "nativo" / "effect.json").write_text(
+        '{"id": "nativo", "name": "Nativo", "version": "1.0.0"}'
+    )
+    (efectos / "nativo" / "frag.glsl").write_text("vec3 effect(vec2 uv){return vec3(1.0);}")
+    await client.post(
+        "/api/effects/upload",
+        files={"archivo": ("q.png", _imagen(tmp / "q.png").read_bytes(), "image/png")},
+        data={"nombre": "borrable"},
+    )
+
+    html = (await client.get("/efectos")).text
+
+    assert "borrar('borrable'" in html
+    assert "borrar('nativo'" not in html
+
+
+async def test_el_catalogo_no_apunta_a_un_destino_que_no_existe(cliente):
+    """Regresion: cuando el catalogo estaba dentro del dashboard, «Usar»
+    intercambiaba `#controls`. Al mudarlo a su pagina ese destino dejo de
+    existir y el boton fallaba en silencio — HTMX solo lo dice por consola."""
+    client, _, tmp = cliente
+    # Con el catalogo vacio no hay tarjetas y la comprobacion no probaria nada.
+    await client.post(
+        "/api/effects/upload",
+        files={"archivo": ("t.png", _imagen(tmp / "t.png").read_bytes(), "image/png")},
+        data={"nombre": "con tarjeta"},
+    )
+
+    html = (await client.get("/efectos")).text
+
+    assert "acciones-efecto" in html, "tiene que haber una tarjeta que inspeccionar"
+    assert 'hx-target="#controls"' not in html
+    assert "probar(" in html
