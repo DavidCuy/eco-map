@@ -25,9 +25,11 @@
   </div>
 </form>
 
+{# Abrir una webcam por DirectShow tarda unos segundos medidos: 'abriendo'
+   no es un parpadeo, es un estado que se ve. #}
 {% set estados = {
     'open': ('dot-up', 'abierta'),
-    'opening': ('', 'abriendo...'),
+    'opening': ('', 'abriendo, puede tardar unos segundos...'),
     'error': ('dot-down', 'error'),
     'closed': ('', 'cerrada'),
 } %}
@@ -39,7 +41,19 @@
   <small class="muted">
     {{ camera.width }}×{{ camera.height }} @ {{ '%.0f'|format(camera.fps or 0) }} fps
     · backend <code>{{ camera.backend }}</code>
+    {% if camera.fourcc %}· formato <code>{{ camera.fourcc }}</code>{% endif %}
   </small>
+  {% if camera.fourcc and camera.fourcc != 'MJPG' %}
+  {# Sin MJPG el ancho de banda USB manda, y los fps que declara la cámara
+     dejan de significar nada. Donde no hay v4l2-ctl, esto es lo único que
+     lo dice. #}
+  <br>
+  <small class="error">
+    El driver entrega <code>{{ camera.fourcc }}</code> y no MJPG: los fps van a
+    estar limitados por el bus USB. Si la cámara soporta MJPG, suele ser cosa
+    del backend — probá con <code>msmf://</code> en vez de <code>dshow://</code>.
+  </small>
+  {% endif %}
   {% elif camera.message %}
   <small class="muted">{{ camera.message }}</small>
   {% endif %}
@@ -80,9 +94,10 @@
 </details>
 {% endif %}
 
-{% if devices | selectattr('kind', 'equalto', 'v4l2') | list | length == 0 %}
+{% if devices | rejectattr('kind', 'equalto', 'fake') | list | length == 0 %}
 <small class="muted">
-  No se detectaron cámaras V4L2. En este equipo es lo esperado: Windows no hace
-  passthrough de USB al contenedor, así que solo está la cámara simulada.
+  No se detectó ninguna cámara: solo está la simulada. Si hay una conectada,
+  en Linux suele faltar pasarle el <code>--device</code> al contenedor, y en
+  Windows el permiso de <em>Privacidad &gt; Cámara</em>.
 </small>
 {% endif %}

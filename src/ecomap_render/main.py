@@ -40,7 +40,6 @@ from ecomap_render.telemetry import FrameTimer, read_temp
 from ecomap_vision.capture import CameraThread
 from ecomap_vision.loopback import set_frame_provider
 from ecomap_vision.motion import MotionDetector
-from ecomap_vision.source import CameraError
 
 log = logging.getLogger(__name__)
 
@@ -73,6 +72,7 @@ class RenderApp:
         self._preview_warned = False
         self.camera: CameraThread | None = None
         self.camera_source: str | None = None
+        self._camara_anunciada = True
         self.detector = MotionDetector()
         self.calibration: CalibrationRunner | None = None
         self._proyectado: Any | None = None
@@ -201,6 +201,7 @@ class RenderApp:
                 self.apply_ms = (time.perf_counter() - self._op_recibida) * 1000.0
                 self._op_recibida = None
 
+            self._anunciar_camara()
             self._update_camera()
             self._maybe_preview(now)
             self._maybe_telemetry(now, tele_period)
@@ -355,10 +356,16 @@ class RenderApp:
         self.detector.reset()  # el fondo de la camara vieja no sirve
 
     def _select_camera(self, source: str) -> None:
-        """Abre la camara pedida y reporta el resultado real por el bus.
+        """Pide abrir la camara. El resultado real lo publica `_anunciar_camara`.
+
+        **No espera a que abra.** Medido en Windows con DirectShow, abrir una
+        webcam tarda casi 5 segundos, y este metodo corre dentro del loop de
+        render: esperar dejaba la proyeccion congelada todo ese rato. El hilo
+        de camara abre por su cuenta y el loop publica el desenlace cuando
+        llega.
 
         Una camara que no se puede abrir **no** es motivo para cortar la
-        proyeccion: se deja sin camara, se avisa, y los efectos que piden
+        proyeccion: se sigue sin camara, se avisa, y los efectos que piden
         `u_cam` reciben textura negra.
         """
         self._close_camera()
@@ -366,33 +373,62 @@ class RenderApp:
         if not source:
             self.bus.publish(ev(EV_CAMERA, state="closed", source=None))
             return
-        try:
-            self._loopback = source.startswith("loopback")
-            self.camera = CameraThread(source, detector=self.detector)
-            self.camera.start()
-        except CameraError as exc:
-            self.camera = None
-            log.warning("camara: %s", exc)
-            self.bus.publish(ev(EV_CAMERA, state="error", source=source, message=str(exc)))
+        self._loopback = source.startswith("loopback")
+        self.camera = CameraThread(source, detector=self.detector)
+        self._camara_anunciada = False
+        self.camera.start()
+        # "opening" es la respuesta honesta mientras tanto: el web ya lo sabe
+        # mostrar, y evita que la UI quede con el estado de la camara anterior.
+        self.bus.publish(ev(EV_CAMERA, state="opening", source=source))
+
+    def _anunciar_camara(self) -> None:
+        """Publica como termino de abrir la camara, una sola vez.
+
+        Corre en el hilo de render a proposito: el bus es suyo, y asi el hilo
+        de camara no necesita saber que existe.
+        """
+        camara = self.camera
+        if camara is None or self._camara_anunciada or not camara.ready:
             return
-        info = self.camera.info
+        self._camara_anunciada = True
+        fuente = self.camera_source or ""
+
+        if not camara.opened:
+            mensaje = camara.error or "no se pudo abrir"
+            self.camera = None
+            self.bus.publish(ev(EV_CAMERA, state="error", source=fuente, message=mensaje))
+            return
+
+        info = camara.info
         log.info(
-            "camara abierta: %s %sx%s @ %.0f fps (%s)",
+            "camara abierta: %s %sx%s @ %.0f fps (%s, formato %s)",
             info.uri,
             info.width,
             info.height,
             info.fps,
             info.backend,
+            info.fourcc or "?",
         )
+        if info.fourcc and info.fourcc != "MJPG":
+            # Sin MJPG el ancho de banda USB limita los fps por mas que
+            # CAP_PROP_FPS diga otra cosa (ADR-010). Donde no hay v4l2-ctl,
+            # este aviso es lo unico que lo dice.
+            log.warning(
+                "camara %s: el driver entrega %s en vez de MJPG; los fps van a "
+                "estar limitados por el bus USB",
+                info.uri,
+                info.fourcc,
+            )
         self.bus.publish(
             ev(
                 EV_CAMERA,
                 state="open",
-                source=source,
+                source=fuente,
                 width=info.width,
                 height=info.height,
                 fps=info.fps,
                 backend=info.backend,
+                fourcc=info.fourcc,
             )
         )
 
@@ -402,7 +438,7 @@ class RenderApp:
         El hilo de vision va a 15 fps y el loop a 60: la textura solo se sube
         cuando hay un frame nuevo, lo demas seria copiar lo mismo tres veces.
         """
-        if self.camera is None or self.pipeline is None:
+        if self.camera is None or self.pipeline is None or not self.camera.opened:
             return
         frame, _chico, seq = self.camera.latest()
         self.pipeline.update_camera(frame, seq)

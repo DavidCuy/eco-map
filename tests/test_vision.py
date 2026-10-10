@@ -243,3 +243,99 @@ def test_la_camara_simulada_aguanta_mas_de_256_frames():
     assert frame is not None
     assert frame.shape == (480, 640, 3)
     assert frame.dtype == np.uint8
+
+
+# --- abrir sin bloquear al render ----------------------------------------
+#
+# Medido: abrir una webcam por DirectShow tarda casi 5 segundos. Antes eso
+# pasaba dentro de `start()`, que llama el loop de render, asi que cambiar de
+# camara congelaba la proyeccion todo ese rato.
+
+
+def test_start_no_espera_a_que_la_camara_abra(monkeypatch):
+    """`start()` tiene que volver enseguida aunque abrir tarde."""
+    import threading
+    import time as _time
+
+    from ecomap_vision.capture import CameraThread
+
+    abriendo = threading.Event()
+
+    def lento(uri, **kwargs):
+        abriendo.set()
+        _time.sleep(0.4)
+        return FuenteControlada([_frame(10)])
+
+    monkeypatch.setattr("ecomap_vision.capture.open_source", lento)
+
+    hilo = CameraThread("test://")
+    try:
+        inicio = _time.perf_counter()
+        hilo.start()
+        tardo = _time.perf_counter() - inicio
+
+        assert tardo < 0.2, f"start() bloqueo {tardo * 1000:.0f} ms"
+        assert abriendo.wait(2.0), "el hilo deberia estar abriendo"
+        assert hilo.ready is False or hilo.opened  # todavia abriendo, o ya abrio
+
+        assert hilo.wait_ready(3.0) is True
+        assert hilo.opened and hilo.error is None
+    finally:
+        hilo.stop()
+
+
+def test_un_fallo_al_abrir_queda_en_error_y_no_lanza(monkeypatch):
+    """El render no puede caerse porque la camara no este: sigue proyectando
+    sin ella y lo reporta."""
+    from ecomap_vision.capture import CameraThread
+    from ecomap_vision.source import CameraError
+
+    def falla(uri, **kwargs):
+        raise CameraError("no hay camara con ese indice")
+
+    monkeypatch.setattr("ecomap_vision.capture.open_source", falla)
+
+    hilo = CameraThread("dshow://9")
+    try:
+        hilo.start()  # no lanza
+
+        assert hilo.wait_ready(3.0) is False
+        assert hilo.opened is False
+        assert hilo.error is not None and "indice" in hilo.error
+    finally:
+        hilo.stop()
+
+
+def test_un_error_inesperado_al_abrir_tampoco_tumba_el_hilo(monkeypatch):
+    """Un driver puede lanzar cualquier cosa; el render tiene que seguir."""
+    from ecomap_vision.capture import CameraThread
+
+    def explota(uri, **kwargs):
+        raise RuntimeError("el driver se cayo")
+
+    monkeypatch.setattr("ecomap_vision.capture.open_source", explota)
+
+    hilo = CameraThread("dshow://0")
+    try:
+        hilo.start()
+        assert hilo.wait_ready(3.0) is False
+        assert hilo.error is not None and "inesperado" in hilo.error
+    finally:
+        hilo.stop()
+
+
+def test_stop_antes_de_que_termine_de_abrir(monkeypatch):
+    """Cambiar de camara dos veces seguidas cierra una que todavia no abrio."""
+    import time as _time
+
+    from ecomap_vision.capture import CameraThread
+
+    def lento(uri, **kwargs):
+        _time.sleep(0.3)
+        return FuenteControlada([_frame(10)])
+
+    monkeypatch.setattr("ecomap_vision.capture.open_source", lento)
+
+    hilo = CameraThread("test://")
+    hilo.start()
+    hilo.stop()  # no debe colgarse ni lanzar
