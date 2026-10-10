@@ -11,6 +11,9 @@
   <link rel="stylesheet" href="/static/app.css?v={{ status.version }}">
   <script src="/static/vendor/htmx.min.js"></script>
   <script src="/static/vendor/htmx-ext-json-enc.js"></script>
+  {# Antes que Alpine y sin defer: el reordenamiento se engancha desde
+     calibrate.js al arrancar y tras cada swap de HTMX. #}
+  <script src="/static/vendor/sortable.min.js"></script>
   <script src="/static/vendor/alpine.min.js" defer></script>
   <script src="/static/params.js?v={{ status.version }}" defer></script>
 </head>

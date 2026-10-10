@@ -7,6 +7,7 @@ de un golpe. Toda mutación empuja la escena al render.
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi.responses import HTMLResponse
 
 from ecomap_core.schemas import (
     LayerCreate,
@@ -61,6 +62,17 @@ def _capa_no_encontrada(layer_id: int) -> HTTPException:
 @router.get("/api/scenes", response_model=list[SceneOut])
 def listar(db: DbDep) -> list[dict]:
     return service.listar(db)
+
+
+@router.get("/api/scenes/panel", response_class=HTMLResponse)
+def panel_actual(request: Request, db: DbDep, state: StateDep) -> Response:
+    """El panel de capas, sin tocar nada.
+
+    Sirve para volver a pintar lo que el servidor cree que hay. Lo usa el
+    reordenamiento por arrastre cuando el servidor rechaza un orden: la lista
+    ya se movio en pantalla, y dejarla asi seria mostrar algo que no es.
+    """
+    return panel(request, db, state)
 
 
 @router.post("/api/scenes", response_model=SceneOut, status_code=status.HTTP_201_CREATED)

@@ -252,8 +252,51 @@
 .scene header { display: flex; gap: 0.5rem; align-items: baseline; margin-bottom: 0.3rem; }
 
 .layers { list-style: none; padding-left: 0; margin: 0 0 0.4rem; font-size: 0.85rem; }
-.layers li { display: flex; gap: 0.4rem; align-items: center; padding: 0.2rem 0; flex-wrap: wrap; }
-.layers li > span:first-child { flex: 1; }
+
+.layers li {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--pico-border-radius);
+  background: var(--pico-card-background-color);
+  margin-bottom: 0.25rem;
+}
+
+.layers .capa-nombre { flex: 1; min-width: 6rem; }
+.layers .sin-capas { background: none; }
+
+/* Solo el tirador arrastra: si lo hiciera toda la fila, tocar un botón en
+   una pantalla táctil empezaría un arrastre. */
+.tirador {
+  cursor: grab;
+  color: var(--pico-muted-color);
+  /* Area de toque de dedo, no de puntero. */
+  padding: 0.2rem 0.3rem;
+  margin: -0.2rem -0.1rem;
+  touch-action: none;
+  user-select: none;
+  line-height: 1;
+}
+
+.tirador:active { cursor: grabbing; }
+
+.layers li.arrastrando {
+  opacity: 0.4;
+  outline: 1px dashed var(--pico-primary);
+}
+
+.layers li select {
+  margin: 0;
+  width: auto;
+  padding: 0.2rem 1.4rem 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  background-position: right 0.4rem center;
+}
+
+.layers .acciones { display: flex; gap: 0.25rem; flex-wrap: wrap; }
+.layers .acciones button { margin: 0; padding: 0.2rem 0.5rem; font-size: 0.8rem; width: auto; }
 
 .scene .acciones { display: flex; gap: 0.25rem; flex-wrap: wrap; }
 .scene .acciones button { margin: 0; padding: 0.2rem 0.5rem; font-size: 0.8rem; width: auto; }

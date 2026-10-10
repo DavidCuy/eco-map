@@ -421,3 +421,130 @@ async def test_sin_caras_no_hay_aviso(cliente):
     """Sin nada calibrado, pantalla completa es exactamente lo que se espera."""
     client, _, _ = cliente
     assert "ninguna capa las usa" not in (await client.get("/")).text
+
+
+# --- el panel de capas: filtrado por cara, blend editable, arrastre --------
+
+
+async def test_el_panel_trae_todas_las_capas_pero_marcadas_por_cara(cliente):
+    """El filtrado por cara pasa en el cliente, no en el servidor.
+
+    En el DOM van **todas** las capas de la escena en su orden de apilado, y
+    cada una dice de que cara es. Dos razones: cambiar de cara no cuesta un
+    viaje —se hace todo el tiempo al calibrar— y al arrastrar hay que poder
+    mandar la lista completa, porque el orden es de la escena entera.
+    """
+    client, _, _ = cliente
+    surface_id, scene_id = await _montar(client)
+    otra = (await client.post("/api/surfaces", json={"name": "otra"})).json()["id"]
+    await client.post(
+        f"/api/scenes/{scene_id}/layers",
+        json={"surface_id": surface_id, "effect_id": "solid"},
+    )
+    await client.post(
+        f"/api/scenes/{scene_id}/layers", json={"surface_id": otra, "effect_id": "plasma"}
+    )
+
+    html = (await client.get("/api/scenes/panel")).text
+
+    assert html.count('data-id=') == 2, "las dos capas tienen que estar en el DOM"
+    # Cada una se muestra solo cuando su cara es la activa
+    assert f"activeId === {surface_id}" in html
+    assert f"activeId === {otra}" in html
+
+
+async def test_el_modo_de_mezcla_se_puede_cambiar_despues(cliente):
+    """Antes el blend se elegia al crear la capa y quedaba fijo: para
+    cambiarlo habia que borrarla y rehacerla."""
+    client, _, _ = cliente
+    surface_id, scene_id = await _montar(client)
+    capa = (
+        await client.post(
+            f"/api/scenes/{scene_id}/layers",
+            json={"surface_id": surface_id, "effect_id": "solid", "blend_mode": "normal"},
+        )
+    ).json()
+
+    html = (await client.get("/api/scenes/panel")).text
+    assert f'hx-patch="/api/layers/{capa["id"]}"' in html
+    assert "blend_mode" in html
+
+    await client.patch(f"/api/layers/{capa['id']}", json={"blend_mode": "screen"})
+
+    capas = (await client.get(f"/api/scenes/{scene_id}")).json()["layers"]
+    assert capas[0]["blend_mode"] == "screen"
+
+
+async def test_el_panel_ya_no_tiene_flechas_de_orden(cliente):
+    """Se reordena arrastrando: con flechas hacia falta un viaje al servidor
+    por cada posicion, y en el celular los botones quedaban diminutos."""
+    client, _, _ = cliente
+    surface_id, scene_id = await _montar(client)
+    await client.post(
+        f"/api/scenes/{scene_id}/layers",
+        json={"surface_id": surface_id, "effect_id": "solid"},
+    )
+
+    html = (await client.get("/api/scenes/panel")).text
+
+    assert "/move?direction=" not in html
+    assert 'class="tirador"' in html
+    assert 'id="layers-sortable"' in html
+
+
+async def test_reordenar_respeta_las_capas_de_las_otras_caras(cliente):
+    """Al ver una sola cara, arrastrar reordena lo visible y lo demas se queda
+    donde esta. El cliente manda el orden completo del DOM, asi que esto es lo
+    que el backend tiene que aceptar."""
+    client, _, _ = cliente
+    surface_id, scene_id = await _montar(client)
+    otra = (await client.post("/api/surfaces", json={"name": "otra"})).json()["id"]
+    a = (
+        await client.post(
+            f"/api/scenes/{scene_id}/layers",
+            json={"surface_id": surface_id, "effect_id": "solid"},
+        )
+    ).json()
+    b = (
+        await client.post(
+            f"/api/scenes/{scene_id}/layers",
+            json={"surface_id": surface_id, "effect_id": "waves"},
+        )
+    ).json()
+    oculta = (
+        await client.post(
+            f"/api/scenes/{scene_id}/layers", json={"surface_id": otra, "effect_id": "plasma"}
+        )
+    ).json()
+
+    # Se invierten las dos visibles; la de la otra cara queda al final
+    respuesta = await client.put(
+        f"/api/scenes/{scene_id}/layers/order",
+        json={"layer_ids": [b["id"], a["id"], oculta["id"]]},
+    )
+
+    assert respuesta.status_code == 200
+    capas = (await client.get(f"/api/scenes/{scene_id}")).json()["layers"]
+    assert [c["id"] for c in capas] == [b["id"], a["id"], oculta["id"]]
+
+
+async def test_un_orden_incompleto_se_rechaza(cliente):
+    """Mandar solo las capas visibles borraria el orden de las demas."""
+    client, _, _ = cliente
+    surface_id, scene_id = await _montar(client)
+    a = (
+        await client.post(
+            f"/api/scenes/{scene_id}/layers",
+            json={"surface_id": surface_id, "effect_id": "solid"},
+        )
+    ).json()
+    await client.post(
+        f"/api/scenes/{scene_id}/layers",
+        json={"surface_id": surface_id, "effect_id": "waves"},
+    )
+
+    respuesta = await client.put(
+        f"/api/scenes/{scene_id}/layers/order", json={"layer_ids": [a["id"]]}
+    )
+
+    assert respuesta.status_code == 422

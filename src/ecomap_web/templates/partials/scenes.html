@@ -1,33 +1,43 @@
-{# Las capas de la escena actual. Una sola, siempre.
+{# Las capas de la cara seleccionada.
 
-   Antes se listaban todas las escenas a la vez, cada una con su lista de
-   capas y su propio formulario de "+ capa": con tres escenas había tres
-   formularios idénticos en pantalla y nada decía cuál importaba. Visualmente
-   parecían varias activas, cuando el render solo proyecta una.
+   En el DOM están **todas** las capas de la escena, en su orden de apilado, y
+   se ocultan las que no son de la cara activa. Es a propósito: el orden es de
+   la escena entera, así que al arrastrar hay que poder mandar la lista
+   completa. Las ocultas se quedan donde están y solo se reordena lo visible,
+   que es lo que uno espera al ver una sola cara.
 
-   Ahora lo que se está tocando es "la escena actual" y punto. Guardarla y
-   abrir otra vive en el panel de escenas guardadas. #}
+   Filtrar en el cliente y no en el servidor evita un viaje cada vez que se
+   cambia de cara, que es algo que se hace todo el tiempo al calibrar. #}
 
 {% set scene = scenes | selectattr('is_active') | first %}
 
 {% if scene %}
-<ol class="layers">
+{% set caras_con_capas = scene.layers | map(attribute='surface_id') | list %}
+<ol class="layers" id="layers-sortable" data-scene="{{ scene.id }}"
+    x-data="{ conCapas: {{ caras_con_capas | tojson }} }">
   {% for layer in scene.layers %}
-  <li class="{{ '' if layer.enabled else 'muted' }}">
-    <span>{{ layer.effect_name }} → {{ layer.surface_name }}</span>
-    <code>{{ layer.blend_mode }}</code>
+  <li data-id="{{ layer.id }}"
+      class="{{ '' if layer.enabled else 'muted' }}"
+      x-show="activeId === {{ layer.surface_id }}">
+    {# El tirador es lo único arrastrable: si lo fuera toda la fila, tocar un
+       botón en una pantalla táctil empezaría un arrastre. #}
+    <span class="tirador" aria-hidden="true" title="arrastrar para reordenar">⠿</span>
+
+    <span class="capa-nombre">{{ layer.effect_name }}</span>
     {% if not layer.effect_available %}<small>⚠ efecto no disponible</small>{% endif %}
+
+    <select aria-label="Modo de mezcla de {{ layer.effect_name }}"
+            hx-patch="/api/layers/{{ layer.id }}"
+            hx-ext="json-enc"
+            hx-trigger="change"
+            hx-vals='js:{"blend_mode": event.target.value}'
+            hx-target="#scenes" hx-swap="innerHTML">
+      {% for modo in ['normal', 'add', 'multiply', 'screen'] %}
+      <option value="{{ modo }}" {{ 'selected' if modo == layer.blend_mode else '' }}>{{ modo }}</option>
+      {% endfor %}
+    </select>
+
     <span class="acciones">
-      {% if not loop.first %}
-      <button class="outline" title="bajar en el apilado"
-              hx-post="/api/layers/{{ layer.id }}/move?direction=down"
-              hx-target="#scenes" hx-swap="innerHTML">↓</button>
-      {% endif %}
-      {% if not loop.last %}
-      <button class="outline" title="subir en el apilado"
-              hx-post="/api/layers/{{ layer.id }}/move?direction=up"
-              hx-target="#scenes" hx-swap="innerHTML">↑</button>
-      {% endif %}
       <button class="outline"
               hx-patch="/api/layers/{{ layer.id }}"
               hx-ext="json-enc"
@@ -38,26 +48,28 @@
               hx-target="#scenes" hx-swap="innerHTML">borrar</button>
     </span>
   </li>
-  {% else %}
-  <li class="muted">
-    Sin capas. El efecto a pantalla completa se proyecta sin deformar, que es
-    lo que sirve para apuntar el proyector.
-  </li>
   {% endfor %}
+
+  {# Vacío **de esta cara**, que no es lo mismo que vacío de la escena. #}
+  <li class="muted sin-capas" x-show="!conCapas.includes(activeId)">
+    <span x-show="active">Esta cara no tiene capas. Agregale una abajo.</span>
+    <span x-show="!active">Elegí una cara para ver sus capas.</span>
+  </li>
 </ol>
 
+{# La cara no se elige acá: es la que está seleccionada arriba. Un select más
+   sería pedir dos veces lo mismo. #}
 <form class="nueva-capa" hx-post="/api/scenes/{{ scene.id }}/layers"
       hx-ext="json-enc" hx-target="#scenes" hx-swap="innerHTML">
-  <select name="surface_id" aria-label="Cara">
-    {% for s in surfaces %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
-  </select>
+  <input type="hidden" name="surface_id" :value="activeId">
   <select name="effect_id" aria-label="Efecto">
     {% for e in effects %}{% if e.available %}<option value="{{ e.id }}">{{ e.name }}</option>{% endif %}{% endfor %}
   </select>
-  <select name="blend_mode" aria-label="Blend">
+  <select name="blend_mode" aria-label="Modo de mezcla">
     {% for modo in ['normal', 'add', 'multiply', 'screen'] %}<option value="{{ modo }}">{{ modo }}</option>{% endfor %}
   </select>
-  <button type="submit" {{ 'disabled' if not surfaces or not effects else '' }}>+ capa</button>
+  <button type="submit" :disabled="!activeId"
+          x-text="active ? '+ capa en ' + active.name : '+ capa'"></button>
 </form>
 
 {% if not surfaces %}

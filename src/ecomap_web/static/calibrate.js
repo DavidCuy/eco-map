@@ -126,6 +126,11 @@ function workspace(config) {
       this.$nextTick(() => this.draw());
       new ResizeObserver(() => this.draw()).observe(this.$refs.stage);
       window.addEventListener('keydown', (e) => this.onKey(e));
+
+      // El orden de las capas se cambia arrastrando. Hay que volver a
+      // engancharlo después de cada swap de HTMX: el <ol> es nuevo cada vez.
+      this.engancharOrden();
+      document.body.addEventListener('htmx:afterSwap', () => this.engancharOrden());
     },
 
     // --- telemetría ---
@@ -142,6 +147,51 @@ function workspace(config) {
         if (msg.type === 'status') this.status = msg;
         if (msg.ev === 'calib') this.onCalib(msg);
       };
+    },
+
+    // --- orden de las capas ---
+    //
+    // Con flechas hacía falta un viaje al servidor por cada posición, y en el
+    // celular los botones quedaban diminutos. Arrastrando se ve el resultado
+    // mientras se mueve.
+
+    engancharOrden() {
+      const lista = document.getElementById('layers-sortable');
+      if (!lista || typeof Sortable === 'undefined') return;
+      if (lista._sortable) lista._sortable.destroy();
+
+      lista._sortable = Sortable.create(lista, {
+        handle: '.tirador',
+        animation: 150,
+        ghostClass: 'arrastrando',
+        // Siempre el modo de respaldo, tambien en escritorio: la API nativa
+        // de drag-and-drop del navegador no existe para el dedo, asi que con
+        // ella el comportamiento seria distinto en el celular que en la
+        // laptop. Uno solo es mas facil de ajustar y de probar.
+        forceFallback: true,
+        // El dedo necesita un instante de presión antes de arrastrar, o cada
+        // intento de hacer scroll mueve una capa.
+        delay: 120,
+        delayOnTouchOnly: true,
+        onEnd: () => this.guardarOrden(lista),
+      });
+    },
+
+    async guardarOrden(lista) {
+      // El orden del DOM **ya es** el orden nuevo, y están todas las capas de
+      // la escena aunque solo se vean las de la cara activa: las ocultas se
+      // quedaron donde estaban. El backend exige la lista completa.
+      const ids = [...lista.querySelectorAll('li[data-id]')].map((li) => Number(li.dataset.id));
+      if (!ids.length) return;
+      try {
+        await this.api('PUT', `/api/scenes/${lista.dataset.scene}/layers/order`, {
+          layer_ids: ids,
+        });
+      } catch (e) {
+        // El servidor manda; si rechazó el orden, se recarga el fragmento
+        // para no dejar la pantalla mintiendo.
+        if (window.htmx) htmx.ajax('GET', '/api/scenes/panel', '#scenes');
+      }
     },
 
     // --- blackout ---
