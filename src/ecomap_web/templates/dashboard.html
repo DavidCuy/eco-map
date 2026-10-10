@@ -26,15 +26,31 @@
   </header>
 
   <p x-show="error" class="error" x-text="error"></p>
+  {# Vuelta desde la página de efectos con uno recién guardado. #}
+  <p x-show="aviso" class="aviso" x-text="aviso"></p>
 
   {% if fallback_activo %}
   {# El efecto a pantalla completa sin capas es intencional, pero con caras ya
      calibradas parece que el warp esta roto. Se dice. #}
   <p class="aviso">
     Proyectando <strong>a pantalla completa</strong>: hay caras calibradas pero ninguna capa las usa.
-    Agregá una capa en <em>Escenas y capas</em> para que el efecto se deforme sobre ellas.
+    Agregá una capa en <em>Capas de la escena actual</em> para que el efecto se deforme sobre ellas.
   </p>
   {% endif %}
+
+  {# Barra sobre el preview: lo que se toca sin dejar de mirar la proyección.
+     El blackout está acá y no dentro de un panel porque apagar y prender es
+     la acción más frecuente de un montaje. #}
+  <div class="sobre-preview">
+    <button class="blackout-toggle"
+            :class="blackout ? 'contrast' : 'secondary outline'"
+            :aria-pressed="blackout"
+            @click="toggleBlackout()">
+      <span class="punto-blackout" :class="blackout ? 'apagado' : 'encendido'"></span>
+      <span x-text="blackout ? 'Proyección apagada' : 'Proyectando'"></span>
+    </button>
+    <small class="muted" x-show="active" x-text="'editando: ' + (active ? active.name : '')"></small>
+  </div>
 
   {# Canvas: el preview del render de fondo, los handles encima. Se separa en
      dos capas para no tener que leer píxeles del stream, que ensuciaría el
@@ -54,6 +70,30 @@
     <div class="zoom" :style="zoomStyle()">
       <div class="crosshair"></div>
     </div>
+  </div>
+
+  {# Tira de caras, debajo del canvas: como solo se dibuja la cara activa,
+     elegir cuál es el primer paso y no el último. Con una superficie por cara
+     física, saltar entre ellas tiene que costar un toque. #}
+  <div class="strip" x-ref="strip">
+    <template x-for="s in surfaces" :key="s.id">
+      {# Un div y no un button: adentro va el tirador, y un botón dentro de
+         otro botón no es HTML válido. El rol y el teclado se declaran a mano. #}
+      <div class="chip" role="button" tabindex="0" :data-id="s.id"
+           :class="{ 'chip-active': s.id === activeId, 'chip-off': !s.enabled }"
+           @click="activeId = s.id; activeHandle = null; draw()"
+           @keydown.enter="activeId = s.id; activeHandle = null; draw()"
+           @keydown.space.prevent="activeId = s.id; activeHandle = null; draw()">
+        <span class="tirador" aria-hidden="true" title="arrastrar para reordenar">⠿</span>
+        <span class="chip-texto">
+          <span x-text="s.name"></span>
+          <small class="muted" x-text="s.mesh_cols + '×' + s.mesh_rows"></small>
+        </span>
+      </div>
+    </template>
+    <span x-show="!surfaces.length" class="muted">
+      Sin caras todavía. El efecto se proyecta a pantalla completa, que es lo que sirve para apuntar.
+    </span>
   </div>
 
   <nav class="toolbar">
@@ -78,21 +118,6 @@
             x-text="vista === 'proyector' ? 'ver cámara' : 'ver proyector'"></button>
   </nav>
 
-  {# Tira de caras: con una superficie por cara física, saltar entre ellas tiene
-     que costar un toque. #}
-  <div class="strip">
-    <template x-for="s in surfaces" :key="s.id">
-      <button class="chip"
-              :class="{ 'chip-active': s.id === activeId, 'chip-off': !s.enabled }"
-              @click="activeId = s.id; activeHandle = null; draw()">
-        <span x-text="s.name"></span>
-        <small class="muted" x-text="s.mesh_cols + '×' + s.mesh_rows"></small>
-      </button>
-    </template>
-    <span x-show="!surfaces.length" class="muted">
-      Sin caras todavía. El efecto se proyecta a pantalla completa, que es lo que sirve para apuntar.
-    </span>
-  </div>
 
   <details class="panel">
     <summary>Efecto y control</summary>
@@ -102,16 +127,49 @@
   </details>
 
   <details class="panel" open>
-    <summary>Escenas y capas</summary>
+    <summary>Capas de la escena actual</summary>
     <div id="scenes">
       {% include "partials/scenes.html" %}
     </div>
+    {# Fuera de #scenes a propósito: el panel de capas se intercambia entero en
+       cada acción, y los parámetros de la capa elegida no tienen por qué
+       perderse porque se ocultó otra. #}
+    <div id="capa-params" x-show="layerId"></div>
+
+    {# El formulario también vive fuera, y al final: así los parámetros de la
+       capa elegida quedan pegados a su fila y no separados por un formulario
+       en el medio. De paso deja de re-renderizarse en cada acción. #}
+    {# Sin caras no hay donde poner una capa, y un formulario con el boton
+       deshabilitado se lee como que el boton no existe — paso de verdad. Se
+       cambia por una salida de un clic. #}
+    <p class="sin-caras" x-show="!surfaces.length">
+      <span>Todavía no hay caras. Una capa va siempre sobre una cara.</span>
+      <button @click="addSurface()">+ crear la primera cara</button>
+    </p>
+
+    {% if scene %}
+    <form class="nueva-capa" x-show="surfaces.length"
+          hx-post="/api/scenes/{{ scene.id }}/layers"
+          hx-ext="json-enc" hx-target="#scenes" hx-swap="innerHTML">
+      <input type="hidden" name="surface_id" :value="activeId">
+      <select name="effect_id" aria-label="Efecto">
+        {% for e in effects %}{% if e.available %}<option value="{{ e.id }}">{{ e.name }}</option>{% endif %}{% endfor %}
+      </select>
+      <select name="blend_mode" aria-label="Modo de mezcla">
+        {% for modo in ['normal', 'add', 'multiply', 'screen'] %}<option value="{{ modo }}">{{ modo }}</option>{% endfor %}
+      </select>
+      <button type="submit" :disabled="!activeId"
+              x-text="active ? '+ capa en ' + active.name : '+ capa'"></button>
+    </form>
+    {% endif %}
   </details>
 
+  {# Escenas guardadas: documentos, no filas. Lo que se está tocando ya es la
+     escena; esto es para quedarse con una copia y volver a ella. #}
   <details class="panel">
-    <summary>Catálogo de efectos</summary>
-    <div id="catalog">
-      {% include "partials/catalog.html" %}
+    <summary>Escenas guardadas</summary>
+    <div id="snapshots">
+      {% include "partials/snapshots.html" %}
     </div>
   </details>
 
@@ -172,5 +230,5 @@
   </details>
 </div>
 
-<script src="/static/calibrate.js"></script>
+<script src="/static/calibrate.js?v={{ status.version }}"></script>
 {% endblock %}

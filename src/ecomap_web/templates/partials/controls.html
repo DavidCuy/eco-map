@@ -1,36 +1,35 @@
 {% import "macros/params.html" as params %}
-{# Efecto activo, sus parámetros y el blackout. Fragmento intercambiado por
+{# Efecto global y sus parámetros. Fragmento intercambiado por
    HTMX tras cada acción: los controles se regeneran desde el manifiesto, así
    que un efecto con un parámetro nuevo aparece sin tocar el frontend. #}
 
-<div class="grid">
-  <button
-    class="{{ 'contrast' if status.blackout else 'secondary' }}"
-    hx-post="/api/system/blackout"
-    hx-ext="json-enc"
-    hx-vals='{"on": {{ 'false' if status.blackout else 'true' }}}'
-    hx-target="#controls"
-    hx-swap="innerHTML">
-    {{ 'Salir de blackout' if status.blackout else 'Blackout' }}
-  </button>
-
-  <select name="id"
-          hx-post="/api/effects/active"
-          hx-ext="json-enc"
-          hx-trigger="change"
-          hx-vals='js:{"id": event.target.value}'
-          hx-target="#controls"
-          hx-swap="innerHTML"
-          aria-label="Efecto activo">
-    {% for effect in effects %}
-    <option value="{{ effect.id }}"
-            {{ 'selected' if effect.id == status.effect else '' }}
-            {{ 'disabled' if not (effect.available and effect.compiled) else '' }}>
-      {{ effect.name }}{% if not effect.available %} — falta en disco{% elif not effect.compiled %} — no compila{% endif %}
-    </option>
-    {% endfor %}
-  </select>
-</div>
+{# El blackout se fue a la barra sobre el preview: es la accion mas frecuente
+   de un montaje y no puede vivir dentro de un panel plegado. Lo que queda aca
+   es el efecto global, que es otra cosa. #}
+<label for="efecto-global">
+  Efecto a pantalla completa
+  <small class="muted">
+    para apuntar el proyector antes de calibrar. Se proyecta sin deformar, y
+    solo si la escena activa no tiene capas.
+  </small>
+</label>
+{# Sin aria-label: ahora hay un <label for> de verdad, y un aria-label lo
+   pisaria para quien use lector de pantalla. #}
+<select id="efecto-global" name="id"
+        hx-post="/api/effects/active"
+        hx-ext="json-enc"
+        hx-trigger="change"
+        hx-vals='js:{"id": event.target.value}'
+        hx-target="#controls"
+        hx-swap="innerHTML">
+  {% for effect in effects %}
+  <option value="{{ effect.id }}"
+          {{ 'selected' if effect.id == status.effect else '' }}
+          {{ 'disabled' if not (effect.available and effect.compiled) else '' }}>
+    {{ effect.name }}{% if not effect.available %} — falta en disco{% elif not effect.compiled %} — no compila{% endif %}
+  </option>
+  {% endfor %}
+</select>
 
 {% if active_effect and active_effect.params %}
 <div class="params">

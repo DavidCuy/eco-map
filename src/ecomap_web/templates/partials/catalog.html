@@ -1,6 +1,12 @@
-{# Catalogo de efectos: preview, tags y costo. El preview sale del volumen,
-   no de static, porque el catalogo se puede reemplazar entero sin tocar la
-   imagen del contenedor. #}
+{# Catálogo de efectos: preview, tags y costo. El preview sale del volumen,
+   no de static, porque el catálogo se puede reemplazar entero sin tocar la
+   imagen del contenedor.
+
+   Las acciones van por Alpine y no por HTMX: este partial vive en una página
+   propia, y «probar» no reemplaza nada de la pantalla —manda el efecto al
+   proyector— así que no tiene destino que intercambiar. Cuando el catálogo
+   estaba dentro del dashboard apuntaba a `#controls`; al mudarlo, ese destino
+   dejó de existir y el botón quedó fallando en silencio. #}
 <div class="catalog">
   {% for effect in effects %}
   <article class="card {{ 'card-off' if not (effect.available and effect.compiled) else '' }}">
@@ -15,18 +21,33 @@
       <code>costo {{ effect.cost }}</code>
       {% if effect.needs_camera %}<code>cámara</code>{% endif %}
     </p>
+
     {% if not effect.available %}
     <small class="muted">⚠ ya no está en disco; las capas que lo usan no se rompen</small>
     {% elif not effect.compiled %}
     <small class="muted">⚠ no compila: {{ effect.error }}</small>
-    {% else %}
-    <button hx-post="/api/effects/active" hx-ext="json-enc"
-            hx-vals='{"id": "{{ effect.id }}"}'
-            hx-target="#controls" hx-swap="innerHTML">Usar</button>
     {% endif %}
+
+    <div class="acciones-efecto">
+      {% if effect.available and effect.compiled %}
+      <button class="secondary" @click="probar('{{ effect.id }}', '{{ effect.name }}')">
+        Probar
+      </button>
+      {% endif %}
+
+      {# Solo los subidos. Los que vienen con el sistema no se borran desde la
+         web: volver a tenerlos significaría reinstalar. #}
+      {% if effect.source_kind %}
+      <button class="secondary outline"
+              @click="borrar('{{ effect.id }}', '{{ effect.name }}')">
+        Borrar
+      </button>
+      {% endif %}
+    </div>
   </article>
   {% endfor %}
 </div>
+
 <button class="secondary outline"
         hx-post="/api/effects/reload" hx-target="#catalog" hx-swap="innerHTML">
   Volver a escanear el volumen

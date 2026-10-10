@@ -15,6 +15,7 @@ from ecomap_core.schemas import (
     SubdivideIn,
     SurfaceCreate,
     SurfaceOut,
+    SurfaceReorder,
     SurfaceUpdate,
 )
 from ecomap_web.deps import BusDep, DbDep
@@ -50,6 +51,22 @@ async def crear(payload: SurfaceCreate, db: DbDep, bus: BusDep) -> dict:
         raise _geometria_invalida(exc) from exc
     await service.push_escena(bus, db)
     return superficie
+
+
+@router.put("/order", response_model=list[SurfaceOut])
+def reordenar(payload: SurfaceReorder, db: DbDep) -> list[dict]:
+    """Cambia el orden de la tira de caras.
+
+    No avisa al render: el orden de las caras es navegacion del dashboard, y
+    lo que se proyecta no cambia. Mandar la escena entera por esto seria hacer
+    trabajar al render para nada.
+    """
+    try:
+        return service.reordenar(db, payload.surface_ids)
+    except service.InvalidOrder as exc:
+        # 422 por numero: Starlette le cambio el nombre a la constante, y el
+        # resto de los routers ya lo escribe asi.
+        raise HTTPException(422, str(exc)) from exc
 
 
 @router.get("/{surface_id}", response_model=SurfaceOut)

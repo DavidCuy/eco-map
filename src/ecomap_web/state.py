@@ -37,6 +37,10 @@ class AppState:
         # Lo pone el web cuando llega un resultado valido, para que el router
         # lo guarde en la base sin tener que hablar con el bus.
         self.on_calibration: Any | None = None
+        # Parametros de capa que ya viajaron al render pero todavia no se
+        # escribieron a disco. Mismo criterio que con el efecto global: lo que
+        # se ve viaja siempre, lo que se guarda se difiere (ADR-004).
+        self.layer_params: dict[int, dict[str, Any]] = {}
         self.camera = CameraStatus()
         self.camera_source: str | None = None
         self.logs: list[dict[str, Any]] = []

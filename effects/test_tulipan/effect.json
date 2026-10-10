@@ -1,0 +1,15 @@
+{
+  "id": "test_tulipan",
+  "name": "test tulipan",
+  "version": "1.0.0",
+  "tags": [
+    "video"
+  ],
+  "needs_camera": false,
+  "cost": "medium",
+  "params": [],
+  "source": {
+    "kind": "video",
+    "file": "media.mp4"
+  }
+}

@@ -13,7 +13,8 @@ from typing import Any
 from ecomap_core.geometry import Mesh
 
 COLUMNAS = (
-    "id, name, kind, mesh_cols, mesh_rows, points, mask, opacity, enabled, created_at, updated_at"
+    "id, name, kind, mesh_cols, mesh_rows, points, mask, opacity, enabled, "
+    "position, created_at, updated_at"
 )
 
 
@@ -26,7 +27,9 @@ def _fila_a_dict(fila: sqlite3.Row) -> dict[str, Any]:
 
 
 def listar(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    filas = conn.execute(f"SELECT {COLUMNAS} FROM surface ORDER BY id").fetchall()
+    # Por `position` y despues por id: el id desempata si dos quedaran igual,
+    # y asi el orden nunca es arbitrario.
+    filas = conn.execute(f"SELECT {COLUMNAS} FROM surface ORDER BY position, id").fetchall()
     return [_fila_a_dict(f) for f in filas]
 
 
@@ -43,11 +46,24 @@ def crear(
     mesh_rows: int,
     points: Mesh,
 ) -> int:
+    # Al final de la tira: una cara nueva no deberia aparecer en el medio de
+    # las que ya estan ordenadas.
+    fila = conn.execute(
+        "SELECT COALESCE(MAX(position), 0) + 1 AS siguiente FROM surface"
+    ).fetchone()
     cursor = conn.execute(
-        "INSERT INTO surface (name, kind, mesh_cols, mesh_rows, points) VALUES (?, ?, ?, ?, ?)",
-        (name, kind, mesh_cols, mesh_rows, json.dumps(points)),
+        "INSERT INTO surface (name, kind, mesh_cols, mesh_rows, points, position) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (name, kind, mesh_cols, mesh_rows, json.dumps(points), fila["siguiente"]),
     )
     return int(cursor.lastrowid)
+
+
+def reordenar(conn: sqlite3.Connection, surface_ids: list[int]) -> None:
+    conn.executemany(
+        "UPDATE surface SET position = ? WHERE id = ?",
+        [(posicion, surface_id) for posicion, surface_id in enumerate(surface_ids)],
+    )
 
 
 def actualizar(conn: sqlite3.Connection, surface_id: int, campos: dict[str, Any]) -> None:

@@ -137,3 +137,66 @@ warping evalúa el fbm cinco veces por píxel, así que cada octava cuesta cinco
 - Normalizar por `u_resolution`, nunca asumir 1920×1080.
 
 Relacionado: [[Presupuesto-de-Rendimiento]] · [[Modulo-Render]] · [[Modelo-de-Datos]]
+
+## Efectos a partir de un archivo
+
+Un efecto clásico pinta con código. Desde la página `/efectos` también se puede
+subir una **imagen, un gif o un video corto**, y lo que sale es **el mismo tipo
+de cosa**: un directorio con `effect.json`, `frag.glsl` y `preview.jpg`.
+
+Esa es la decisión que mantiene simple todo lo demás. El shader se genera y se
+escribe al crear el efecto, así que el render no tiene que saber que existen
+dos clases: carga y compila igual. Lo único nuevo es que hay una textura que
+alimentar cuando el manifiesto declara `source`:
+
+```json
+"source": { "kind": "image", "file": "media.png" }
+```
+
+El catálogo, las capas, los parámetros y el guardado de escenas siguen
+funcionando sin tocarse.
+
+### Qué se puede ajustar y qué no
+
+| | Movimiento | Parámetros |
+|---|---|---|
+| Imagen | se le agrega: velocidad y ángulo | `speed`, `angle` |
+| Gif | el suyo | ninguno |
+| Video | el suyo | ninguno |
+
+Una imagen quieta proyectada es un cuadro, no un efecto: por eso se le puede
+dar desplazamiento. Un gif y un video ya traen el suyo, y agregarles otro
+encima solo los ensucia.
+
+La velocidad y el ángulo elegidos al subir quedan como los **valores por
+defecto del manifiesto**, no como overrides de una capa: son parte de cómo se
+definió el efecto, y cualquier capa que lo use arranca así.
+
+### El costo está en el render, no en la subida
+
+Una imagen se sube a GPU una vez. Un gif o un video hay que **decodificarlos
+frame a frame dentro del loop de render**, que es donde esto puede doler. Tres
+decisiones por eso (`ecomap_render/media.py`):
+
+- **Se reduce al subir a GPU** (`MAX_LADO`), no al guardar. Importa cuánto
+  ocupa en la cara, no el tamaño del archivo.
+- **El avance va por reloj de pared**, no por frame de render: el video se ve a
+  su velocidad aunque el render vaya a 30 o a 60, y si el render se atrasa el
+  video no se pone en cámara lenta.
+- **Un frame que no llega repite el anterior.** Un bucle que parpadea es peor
+  que uno que se traba un cuadro.
+
+Por eso un efecto de video se marca `cost: medium` y uno de imagen `low`.
+
+### La previsualización reproduce el shader, no se le parece
+
+El canvas de `/efectos` hace el mismo `fract(uv + dirección · velocidad · t)`
+que el GLSL, con el ángulo en grados. Si se viera de una forma ahí y de otra
+proyectado, el control no serviría para decidir nada.
+
+### Borrar
+
+Solo se borran los efectos con `source`. Los que vienen con el sistema no,
+porque volver a tenerlos significaría reinstalar. Y borrar uno **no borra las
+capas que lo usaban**: quedan marcadas como no disponibles, que es el mismo
+camino que ya existía cuando un efecto desaparece del volumen.

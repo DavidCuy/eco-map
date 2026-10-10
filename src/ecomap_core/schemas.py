@@ -86,6 +86,10 @@ class EffectOut(BaseModel):
     cost: str = "low"
     params: list[EffectParamOut] = []
     available: bool = True
+    # "image", "gif" o "video" si el efecto se creo subiendo un archivo; None
+    # si vino con el sistema. Es lo que decide si se puede borrar desde la
+    # web: volver a tener uno del sistema significaria reinstalar.
+    source_kind: str | None = None
     # `available` dice que el manifiesto es valido y el directorio existe;
     # `compiled`, que el shader pasa el compilador de **este** driver. Un efecto
     # puede estar perfecto en disco y no compilar en la Pi.
@@ -179,6 +183,12 @@ class CalibrationOut(BaseModel):
     created_at: str | None = None
 
 
+class SnapshotSave(BaseModel):
+    """Guardar la instalacion actual con un nombre."""
+
+    name: str = Field(min_length=1, max_length=60)
+
+
 class CameraSelectRequest(BaseModel):
     source: str = Field(
         description="URI de la camara: fake:// o v4l2:///dev/v4l/by-id/...",
@@ -215,6 +225,12 @@ class SubdivideIn(BaseModel):
     rows: int = Field(ge=1, le=32)
 
 
+class SurfaceReorder(BaseModel):
+    """Ids de cara en el orden en que deben aparecer en la tira."""
+
+    surface_ids: list[int] = Field(min_length=1)
+
+
 class SurfaceOut(BaseModel):
     id: int
     name: str
@@ -224,6 +240,9 @@ class SurfaceOut(BaseModel):
     points: list[Punto]
     opacity: float
     enabled: bool
+    # Orden en la tira de caras. Es navegacion, no render: el apilado lo
+    # decide el z_order de las capas.
+    position: int = 0
     updated_at: str
 
 

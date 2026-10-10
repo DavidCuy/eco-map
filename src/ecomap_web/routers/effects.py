@@ -9,10 +9,11 @@ el driver de la Pi, así que el estado que muestra la UI junta las dos fuentes:
 from __future__ import annotations
 
 import json
+import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request, Response, status
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Form, HTTPException, Request, Response, UploadFile, status
+from fastapi.responses import FileResponse, JSONResponse
 
 from ecomap_core.effects import PREVIEW_NAME, EffectManifest, resolve_params
 from ecomap_core.protocol import OP_EFFECT, OP_EFFECTS_RELOAD, op
@@ -21,6 +22,7 @@ from ecomap_web.db import log_event, set_setting
 from ecomap_web.deps import BusDep, DbDep, SettingsDep, StateDep, WriterDep, build_status
 from ecomap_web.routers.pages import render_fragment
 from ecomap_web.services import effects as service
+from ecomap_web.services import media_effects as media_service
 
 router = APIRouter(prefix="/api/effects", tags=["effects"])
 
@@ -80,6 +82,121 @@ async def recargar(
     if request.headers.get("HX-Request"):
         return render_fragment(request, "partials/catalog.html", {"effects": catalogo(db, state)})
     return catalogo(db, state)
+
+
+@router.post("/upload", status_code=status.HTTP_201_CREATED)
+async def subir(
+    request: Request,
+    db: DbDep,
+    bus: BusDep,
+    state: StateDep,
+    settings: SettingsDep,
+    archivo: UploadFile,
+    nombre: str = Form(...),
+    speed: float = Form(0.1),
+    angle: float = Form(0.0),
+) -> Response:
+    """Crea un efecto a partir de una imagen, un gif o un video corto.
+
+    Termina siendo un efecto como cualquier otro —directorio con manifiesto,
+    shader y preview— asi que desde aca en adelante el catalogo, las capas y
+    las escenas lo tratan igual que a uno escrito a mano.
+    """
+    crudo = await archivo.read(media_service.MAX_BYTES + 1)
+    if len(crudo) > media_service.MAX_BYTES:
+        raise HTTPException(
+            HTTP_422,
+            f"el archivo pasa de {media_service.MAX_BYTES // (1024 * 1024)} MB. "
+            "Esto proyecta bucles cortos, no reproduce peliculas.",
+        )
+
+    # A disco antes de validarlo: OpenCV abre rutas, no buffers, y escribir un
+    # temporal es mas barato que mantener una copia en memoria del render.
+    with tempfile.NamedTemporaryFile(
+        suffix=Path(archivo.filename or "").suffix, delete=False
+    ) as temporal:
+        temporal.write(crudo)
+        ruta_temporal = Path(temporal.name)
+
+    try:
+        manifiesto = media_service.crear(
+            settings.effects_dir,
+            nombre,
+            ruta_temporal,
+            archivo.filename or "",
+            defaults={"speed": speed, "angle": angle},
+        )
+    except media_service.MediaEffectError as exc:
+        raise HTTPException(HTTP_422, str(exc)) from exc
+    finally:
+        ruta_temporal.unlink(missing_ok=True)
+
+    await _resincronizar(db, bus, state, settings)
+    return JSONResponse({"effect": manifiesto}, status_code=status.HTTP_201_CREATED)
+
+
+@router.delete("/{effect_id}/upload", status_code=status.HTTP_204_NO_CONTENT)
+async def borrar_subido(
+    effect_id: str, db: DbDep, bus: BusDep, state: StateDep, settings: SettingsDep
+) -> Response:
+    """Borra un efecto subido. Los que vienen con el sistema no se tocan.
+
+    Las capas que lo usaban **no se borran**: quedan marcadas como no
+    disponibles, igual que si el archivo hubiera desaparecido del volumen. Es
+    el mismo camino que ya existia, y borrar capas de escenas guardadas por
+    quitar un efecto seria una sorpresa desagradable.
+    """
+    # Se decide por el espejo y no por el disco: un efecto subido cuyo
+    # directorio ya no esta tiene que poder sacarse del catalogo igual.
+    if service.fuente_de(db, effect_id) is None:
+        raise HTTPException(
+            HTTP_422,
+            f"«{effect_id}» no se creo subiendo un archivo: los que vienen con el "
+            "sistema no se borran desde la web, porque volver a tenerlos "
+            "significaria reinstalar.",
+        )
+
+    if (settings.effects_dir / effect_id).is_dir():
+        try:
+            media_service.borrar(settings.effects_dir, effect_id)
+        except media_service.MediaEffectError as exc:
+            raise HTTPException(HTTP_422, str(exc)) from exc
+
+    await _resincronizar(db, bus, state, settings)
+    # Despues de resincronizar, para que el espejo ya lo tenga como no
+    # disponible y el conteo de capas sea el real.
+    service.olvidar(db, effect_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+async def _resincronizar(db, bus, state, settings) -> None:
+    """Espeja el catalogo en SQLite y le dice al render que recargue.
+
+    Las dos cosas: el web necesita el espejo para ofrecerlo en los selectores
+    y el render necesita compilar el shader nuevo y cargar su archivo. Sin lo
+    segundo, el efecto aparece en la lista y proyecta negro.
+    """
+    service.sincronizar(db, settings.effects_dir)
+    await bus.send(op(OP_EFFECTS_RELOAD))
+
+
+@router.get("/{effect_id}/media")
+def media(effect_id: str, settings: SettingsDep) -> FileResponse:
+    """El archivo original del efecto, para previsualizarlo en el navegador.
+
+    El preview del catalogo es una imagen fija; para ver como se mueve un gif
+    o un video hace falta el archivo de verdad.
+    """
+    directorio = settings.effects_dir / effect_id
+    try:
+        manifiesto = json.loads((directorio / "effect.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "sin archivo") from exc
+    fuente = manifiesto.get("source") or {}
+    ruta = directorio / str(fuente.get("file", ""))
+    if not fuente or not ruta.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "este efecto no tiene archivo")
+    return FileResponse(ruta)
 
 
 @router.get("/{effect_id}/preview")

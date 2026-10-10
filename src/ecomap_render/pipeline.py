@@ -26,6 +26,7 @@ import moderngl
 from ecomap_render import shaders
 from ecomap_render.context import is_gles
 from ecomap_render.effects import EffectLibrary
+from ecomap_render.media import MediaLibrary
 from ecomap_render.surface import SurfaceMesh
 
 log = logging.getLogger(__name__)
@@ -142,7 +143,9 @@ class Pipeline:
         self.vao_full = self._quad_completo()
 
         self.library = EffectLibrary(ctx, effects_dir, self.header)
+        self.media = MediaLibrary(ctx)
         self.library.reload()
+        self.media.sync(self.library.efectos())
         # Textura negra de 1x1 para los efectos que piden camara cuando no hay:
         # sin esto el sampler queda sin enlazar y el resultado es indefinido.
         self._sin_camara = ctx.texture((1, 1), components=3, data=bytes(3))
@@ -155,6 +158,16 @@ class Pipeline:
         self.scene_id: int | None = None
         self.fallback_effect: str | None = None
         self.fallback_params: dict[str, Any] = {}
+
+    def reload_library(self) -> None:
+        """Recarga el catalogo y vuelve a cargar los archivos de los efectos.
+
+        Las dos cosas juntas y no por separado: un efecto subido desde la web
+        aparece con su manifiesto y su archivo al mismo tiempo, y olvidarse
+        del segundo lo deja compilando pero proyectando negro.
+        """
+        self.library.reload()
+        self.media.sync(self.library.efectos())
 
     # --- escena ---
 
@@ -255,6 +268,11 @@ class Pipeline:
             self.ctx.clear(0.0, 0.0, 0.0)
             return
 
+        # Los videos avanzan una vez por frame, no una vez por capa: dos capas
+        # del mismo efecto comparten la textura y adelantarla dos veces lo
+        # haria ir al doble de velocidad.
+        self.media.tick()
+
         if not self.layers:
             self._render_fallback(target, time)
             return
@@ -304,12 +322,16 @@ class Pipeline:
             capa.prev_texture.use(location=2)
         else:
             self._sin_camara.use(location=2)
+        # Imagen, gif o video del efecto. Si no tiene, queda una textura negra
+        # de 1x1: un sampler sin enlazar da resultado indefinido.
+        self.media.bind(effect_id, 3)
 
         compilado.set_common(
             u_time=time,
             u_resolution=(float(size[0]), float(size[1])),
             u_cam=1,
             u_prev=2,
+            u_media=3,
             u_motion=self.motion,
             u_motion_pos=self.motion_pos,
         )
@@ -339,6 +361,7 @@ class Pipeline:
         self.vao_full.release()
         self._vbo_full.release()
         self.library.release()
+        self.media.release()
         self._fallback_fbo.release()
         self._fallback_tex.release()
         self._sin_camara.release()

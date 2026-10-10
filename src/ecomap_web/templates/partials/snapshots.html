@@ -1,0 +1,97 @@
+{# Escenas guardadas, con semántica de documento: Guardar y Abrir.
+
+   Reemplaza al botón "+ escena", que obligaba a crear algo con nombre antes
+   de poder trabajar y no explicaba para qué. Ahora lo que estás tocando ya es
+   la escena; guardarla es quedarse con una copia. #}
+
+<div class="snapshots">
+  <form hx-post="/api/snapshots" hx-ext="json-enc" hx-target="#snapshots" hx-swap="innerHTML"
+        class="guardar-escena">
+    <input type="text" name="name" maxlength="60" required
+           placeholder="nombre para esta instalación"
+           value="{{ scene.name if scene and scene.name != 'escena' else '' }}">
+    <button type="submit">Guardar</button>
+  </form>
+
+  {% if aviso %}
+  <p class="aviso">{{ aviso }}</p>
+  {% endif %}
+
+  {% set guardadas = snapshots | rejectattr('respaldo') | list %}
+  {% set respaldos = snapshots | selectattr('respaldo') | list %}
+
+  {% if guardadas %}
+  <ul class="lista-escenas">
+    {% for s in guardadas %}
+    <li>
+      <span class="nombre">
+        <strong>{{ s.nombre }}</strong>
+        {% if s.roto %}
+        <small class="error">archivo ilegible</small>
+        {% else %}
+        <small class="muted">{{ s.caras }} caras · {{ s.capas }} capas · {{ s.guardado[:16] | replace('T', ' ') }}</small>
+        {% endif %}
+      </span>
+      <span class="acciones">
+        {% if not s.roto %}
+        {# Confirmar siempre: abrir reemplaza la calibración, que cuesta
+           veinte minutos de ajustar esquinas. El respaldo es automático, pero
+           que sea reversible no es excusa para no avisar. #}
+        <button hx-post="/api/snapshots/{{ s.archivo }}/open"
+                hx-target="#snapshots" hx-swap="innerHTML"
+                hx-confirm="Abrir «{{ s.nombre }}» reemplaza las caras, las capas y la calibración actuales. Se guarda un respaldo automático antes. ¿Seguir?">
+          Abrir
+        </button>
+        <a role="button" class="secondary outline"
+           href="/api/snapshots/{{ s.archivo }}/download" download>descargar</a>
+        {% endif %}
+        <button class="secondary outline"
+                hx-delete="/api/snapshots/{{ s.archivo }}"
+                hx-target="#snapshots" hx-swap="innerHTML"
+                hx-confirm="¿Borrar «{{ s.nombre }}»?">borrar</button>
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">
+    Sin escenas guardadas. Lo que estás viendo ahora ya es una escena: ponele
+    un nombre y guardala para poder volver a ella.
+  </p>
+  {% endif %}
+
+  <form hx-post="/api/snapshots/upload" hx-encoding="multipart/form-data"
+        hx-target="#snapshots" hx-swap="innerHTML" class="subir-escena">
+    <label>
+      <small class="muted">Subir una escena de otro equipo</small>
+      <input type="file" name="archivo" accept="application/json,.json" required>
+    </label>
+    <button type="submit" class="secondary">Subir</button>
+  </form>
+
+  {% if respaldos %}
+  <details>
+    <summary><small>Respaldos automáticos ({{ respaldos | length }})</small></summary>
+    {# Se toma uno antes de cada apertura. Es la red para cuando abrir una
+       escena pisó una calibración que hacía falta. #}
+    <ul class="lista-escenas">
+      {% for s in respaldos %}
+      <li>
+        <span class="nombre">
+          <small class="muted">{{ s.guardado[:16] | replace('T', ' ') if s.guardado else s.archivo }}
+            · {{ s.caras }} caras · {{ s.capas }} capas</small>
+        </span>
+        <span class="acciones">
+          <button class="secondary"
+                  hx-post="/api/snapshots/{{ s.archivo }}/open"
+                  hx-target="#snapshots" hx-swap="innerHTML"
+                  hx-confirm="Volver a este respaldo reemplaza lo que hay ahora. ¿Seguir?">
+            restaurar
+          </button>
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+</div>

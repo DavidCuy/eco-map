@@ -14,11 +14,21 @@
 
   const estado = new WeakMap();
 
+  // A donde van los valores. El panel lo declara: los del efecto global van a
+  // un lado y los de una capa a otro, pero el control es el mismo y no tiene
+  // por que saberlo.
+  const DESTINO_POR_DEFECTO = '/api/effects/active/params';
+
+  function destino(control) {
+    const contenedor = control.closest('[data-params-url]');
+    return contenedor ? contenedor.dataset.paramsUrl : DESTINO_POR_DEFECTO;
+  }
+
   async function enviar(control) {
     const clave = control.dataset.param;
     const valor = leer(control);
     const t0 = performance.now();
-    await fetch('/api/effects/active/params', {
+    await fetch(destino(control), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ params: { [clave]: valor } }),

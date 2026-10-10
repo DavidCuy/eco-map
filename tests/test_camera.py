@@ -334,7 +334,10 @@ async def test_la_escena_le_dice_al_render_que_capa_necesita_realimentacion(clie
 
     app.state.bus.send = espia
     surface_id = (await client.post("/api/surfaces", json={"name": "cara"})).json()["id"]
-    scene_id = (await client.post("/api/scenes", json={"name": "demo"})).json()["id"]
+    # En la escena activa: lo que se le manda al render es solo esa.
+    scene_id = next(
+        e["id"] for e in (await client.get("/api/scenes")).json() if e["is_active"]
+    )
 
     await client.post(
         f"/api/scenes/{scene_id}/layers",

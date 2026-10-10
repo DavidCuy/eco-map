@@ -172,9 +172,15 @@ def actualizar_capa(
     if campos.get("enabled") is not None:
         permitidos["enabled"] = int(bool(campos["enabled"]))
     if campos.get("params") is not None:
-        # Mezcla parcial, igual que con el efecto activo: mover un slider no
-        # pisa el resto de los valores.
-        permitidos["params"] = {**capa["params"], **campos["params"]}
+        if campos.get("_reemplazar_params"):
+            # Restaurar por defecto: se descartan los overrides en vez de
+            # copiar los defaults, asi la capa sigue heredando si el efecto
+            # cambia de version (ADR-011).
+            permitidos["params"] = campos["params"]
+        else:
+            # Mezcla parcial, igual que con el efecto activo: mover un slider
+            # no pisa el resto de los valores.
+            permitidos["params"] = {**capa["params"], **campos["params"]}
     repo.actualizar_capa(conn, layer_id, permitidos)
     return _capa(conn, layer_id)
 
@@ -212,6 +218,11 @@ def mover_capa(conn: sqlite3.Connection, layer_id: int, direccion: str) -> dict[
     return obtener(conn, capa["scene_id"])
 
 
+def obtener_capa(conn: sqlite3.Connection, layer_id: int) -> dict[str, Any]:
+    """Una capa sola. Lanza LayerNotFound si no existe."""
+    return _capa(conn, layer_id)
+
+
 def _capa(conn: sqlite3.Connection, layer_id: int) -> dict[str, Any]:
     capa = repo.obtener_capa(conn, layer_id)
     if capa is None:
@@ -222,8 +233,16 @@ def _capa(conn: sqlite3.Connection, layer_id: int) -> dict[str, Any]:
 # --- escena hacia el render ---------------------------------------------
 
 
-def serializar(conn: sqlite3.Connection) -> dict[str, Any]:
+def serializar(
+    conn: sqlite3.Connection, overrides: dict[int, dict[str, Any]] | None = None
+) -> dict[str, Any]:
     """La escena activa tal como la necesita el render.
+
+    `overrides` son parametros de capa que todavia no se escribieron a disco.
+    Mover un slider manda decenas de valores por segundo: el valor viaja al
+    render enseguida porque es lo que se ve, y la escritura se difiere para no
+    desgastar la SD (ADR-004). Sin esto, el render recibiria el valor viejo
+    hasta que la escritura se volcara medio segundo despues.
 
     Va la geometria de la superficie **dentro** de cada capa: el render no
     tiene indice de superficies ni le sirve tenerlo, y asi un solo mensaje
@@ -244,11 +263,12 @@ def serializar(conn: sqlite3.Connection) -> dict[str, Any]:
                 continue
             if not capa["effect_available"]:
                 continue
+            pendientes = (overrides or {}).get(capa["id"], {})
             capas.append(
                 {
                     "id": capa["id"],
                     "effect": capa["effect_id"],
-                    "params": capa["params"],
+                    "params": {**capa["params"], **pendientes},
                     "blend": capa["blend_mode"],
                     # El render necesita saberlo al construir la capa: una capa
                     # con realimentacion lleva una textura y un FBO extra.
@@ -284,5 +304,9 @@ def _needs_feedback(conn: sqlite3.Connection, effect_id: str) -> bool:
         return False
 
 
-async def push(bus: BusClient, conn: sqlite3.Connection) -> bool:
-    return await bus.send(op(OP_SCENE, scene=serializar(conn)))
+async def push(
+    bus: BusClient,
+    conn: sqlite3.Connection,
+    overrides: dict[int, dict[str, Any]] | None = None,
+) -> bool:
+    return await bus.send(op(OP_SCENE, scene=serializar(conn, overrides)))
