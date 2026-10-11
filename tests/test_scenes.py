@@ -46,10 +46,16 @@ async def cliente(tmp_path: Path):
 
 
 async def _montar(client) -> tuple[int, int]:
-    """Una cara y una escena, que es el minimo para tener una capa."""
+    """Una cara y la escena **activa**, que es el minimo para tener una capa.
+
+    Se renombra la que ya existe en vez de crear otra: el arranque deja una
+    escena de trabajo activa, y una creada despues queda inactiva — sus capas
+    no se proyectan y no aparecen en lo que se le manda al render.
+    """
     surface_id = (await client.post("/api/surfaces", json={"name": "frontal"})).json()["id"]
-    scene_id = (await client.post("/api/scenes", json={"name": "principal"})).json()["id"]
-    return surface_id, scene_id
+    activa = next(e for e in (await client.get("/api/scenes")).json() if e["is_active"])
+    await client.patch(f"/api/scenes/{activa['id']}", json={"name": "principal"})
+    return surface_id, activa["id"]
 
 
 def _ultima_escena(enviados: list[dict]) -> dict:
@@ -59,13 +65,23 @@ def _ultima_escena(enviados: list[dict]) -> dict:
 # --- escenas -------------------------------------------------------------
 
 
-async def test_la_primera_escena_queda_activa(cliente):
-    """Si no, se podrian crear escenas y no proyectar nada."""
+async def test_siempre_hay_exactamente_una_escena_activa(cliente):
+    """Si no, se podrian crear escenas y no proyectar nada.
+
+    La primera la crea el arranque: un equipo recien instalado ya tiene escena
+    de trabajo, porque al sacar el boton "+ escena" de la UI no quedaba forma
+    de crear una. Lo que se comprueba es la invariante: una activa, siempre.
+    """
     client, _, _ = cliente
 
-    escena = (await client.post("/api/scenes", json={"name": "principal"})).json()
+    def activas(escenas):
+        return [e for e in escenas if e["is_active"]]
 
-    assert escena["is_active"] is True
+    assert len(activas((await client.get("/api/scenes")).json())) == 1
+
+    await client.post("/api/scenes", json={"name": "principal"})
+
+    assert len(activas((await client.get("/api/scenes")).json())) == 1
 
 
 async def test_activar_una_escena_cambia_lo_que_se_proyecta(cliente):
@@ -115,13 +131,16 @@ async def test_marcar_default_es_excluyente(cliente):
 
 async def test_borrar_la_escena_activa_pasa_a_otra(cliente):
     client, _, _ = cliente
+    # La activa es la que creo el arranque: se activa otra a proposito para
+    # que el borrado sea el de la que esta proyectando.
     primera = (await client.post("/api/scenes", json={"name": "a"})).json()["id"]
+    await client.post(f"/api/scenes/{primera}/activate")
     await client.post("/api/scenes", json={"name": "b"})
 
     await client.delete(f"/api/scenes/{primera}")
 
     activas = [e for e in (await client.get("/api/scenes")).json() if e["is_active"]]
-    assert len(activas) == 1 and activas[0]["name"] == "b"
+    assert len(activas) == 1 and activas[0]["name"] != "a"
 
 
 async def test_borrar_escena_borra_sus_capas(cliente):
@@ -379,7 +398,11 @@ async def test_la_ui_avisa_cuando_proyecta_a_pantalla_completa(cliente):
     desarrollo: hay que decirlo, no dejarlo adivinar."""
     client, _, _ = cliente
     await client.post("/api/surfaces", json={"name": "frontal"})
-    scene_id = (await client.post("/api/scenes", json={"name": "principal"})).json()["id"]
+    # La capa va en la escena **activa**: una creada aparte no se proyecta, y
+    # el aviso seguiria siendo correcto.
+    scene_id = next(
+        e["id"] for e in (await client.get("/api/scenes")).json() if e["is_active"]
+    )
 
     html = (await client.get("/")).text
     assert "ninguna capa las usa" in html
@@ -398,3 +421,292 @@ async def test_sin_caras_no_hay_aviso(cliente):
     """Sin nada calibrado, pantalla completa es exactamente lo que se espera."""
     client, _, _ = cliente
     assert "ninguna capa las usa" not in (await client.get("/")).text
+
+
+# --- el panel de capas: filtrado por cara, blend editable, arrastre --------
+
+
+async def test_el_panel_trae_todas_las_capas_pero_marcadas_por_cara(cliente):
+    """El filtrado por cara pasa en el cliente, no en el servidor.
+
+    En el DOM van **todas** las capas de la escena en su orden de apilado, y
+    cada una dice de que cara es. Dos razones: cambiar de cara no cuesta un
+    viaje —se hace todo el tiempo al calibrar— y al arrastrar hay que poder
+    mandar la lista completa, porque el orden es de la escena entera.
+    """
+    client, _, _ = cliente
+    surface_id, scene_id = await _montar(client)
+    otra = (await client.post("/api/surfaces", json={"name": "otra"})).json()["id"]
+    await client.post(
+        f"/api/scenes/{scene_id}/layers",
+        json={"surface_id": surface_id, "effect_id": "solid"},
+    )
+    await client.post(
+        f"/api/scenes/{scene_id}/layers", json={"surface_id": otra, "effect_id": "plasma"}
+    )
+
+    html = (await client.get("/api/scenes/panel")).text
+
+    assert html.count('data-id=') == 2, "las dos capas tienen que estar en el DOM"
+    # Cada una se muestra solo cuando su cara es la activa
+    assert f"activeId === {surface_id}" in html
+    assert f"activeId === {otra}" in html
+
+
+async def test_el_modo_de_mezcla_se_puede_cambiar_despues(cliente):
+    """Antes el blend se elegia al crear la capa y quedaba fijo: para
+    cambiarlo habia que borrarla y rehacerla."""
+    client, _, _ = cliente
+    surface_id, scene_id = await _montar(client)
+    capa = (
+        await client.post(
+            f"/api/scenes/{scene_id}/layers",
+            json={"surface_id": surface_id, "effect_id": "solid", "blend_mode": "normal"},
+        )
+    ).json()
+
+    html = (await client.get("/api/scenes/panel")).text
+    assert f'hx-patch="/api/layers/{capa["id"]}"' in html
+    assert "blend_mode" in html
+
+    await client.patch(f"/api/layers/{capa['id']}", json={"blend_mode": "screen"})
+
+    capas = (await client.get(f"/api/scenes/{scene_id}")).json()["layers"]
+    assert capas[0]["blend_mode"] == "screen"
+
+
+async def test_el_panel_ya_no_tiene_flechas_de_orden(cliente):
+    """Se reordena arrastrando: con flechas hacia falta un viaje al servidor
+    por cada posicion, y en el celular los botones quedaban diminutos."""
+    client, _, _ = cliente
+    surface_id, scene_id = await _montar(client)
+    await client.post(
+        f"/api/scenes/{scene_id}/layers",
+        json={"surface_id": surface_id, "effect_id": "solid"},
+    )
+
+    html = (await client.get("/api/scenes/panel")).text
+
+    assert "/move?direction=" not in html
+    assert 'class="tirador"' in html
+    assert 'id="layers-sortable"' in html
+
+
+async def test_reordenar_respeta_las_capas_de_las_otras_caras(cliente):
+    """Al ver una sola cara, arrastrar reordena lo visible y lo demas se queda
+    donde esta. El cliente manda el orden completo del DOM, asi que esto es lo
+    que el backend tiene que aceptar."""
+    client, _, _ = cliente
+    surface_id, scene_id = await _montar(client)
+    otra = (await client.post("/api/surfaces", json={"name": "otra"})).json()["id"]
+    a = (
+        await client.post(
+            f"/api/scenes/{scene_id}/layers",
+            json={"surface_id": surface_id, "effect_id": "solid"},
+        )
+    ).json()
+    b = (
+        await client.post(
+            f"/api/scenes/{scene_id}/layers",
+            json={"surface_id": surface_id, "effect_id": "waves"},
+        )
+    ).json()
+    oculta = (
+        await client.post(
+            f"/api/scenes/{scene_id}/layers", json={"surface_id": otra, "effect_id": "plasma"}
+        )
+    ).json()
+
+    # Se invierten las dos visibles; la de la otra cara queda al final
+    respuesta = await client.put(
+        f"/api/scenes/{scene_id}/layers/order",
+        json={"layer_ids": [b["id"], a["id"], oculta["id"]]},
+    )
+
+    assert respuesta.status_code == 200
+    capas = (await client.get(f"/api/scenes/{scene_id}")).json()["layers"]
+    assert [c["id"] for c in capas] == [b["id"], a["id"], oculta["id"]]
+
+
+async def test_un_orden_incompleto_se_rechaza(cliente):
+    """Mandar solo las capas visibles borraria el orden de las demas."""
+    client, _, _ = cliente
+    surface_id, scene_id = await _montar(client)
+    a = (
+        await client.post(
+            f"/api/scenes/{scene_id}/layers",
+            json={"surface_id": surface_id, "effect_id": "solid"},
+        )
+    ).json()
+    await client.post(
+        f"/api/scenes/{scene_id}/layers",
+        json={"surface_id": surface_id, "effect_id": "waves"},
+    )
+
+    respuesta = await client.put(
+        f"/api/scenes/{scene_id}/layers/order", json={"layer_ids": [a["id"]]}
+    )
+
+    assert respuesta.status_code == 422
+
+
+# --- parametros por capa --------------------------------------------------
+#
+# Hasta ahora los unicos sliders del dashboard eran los del efecto global, que
+# ni siquiera se proyecta cuando la escena tiene capas: cada capa corria con
+# los valores por defecto y no habia forma de cambiarlos, aunque la base los
+# guardaba y la API los aceptaba.
+
+
+async def _una_capa(client, efecto: str = "waves") -> dict:
+    surface_id, scene_id = await _montar(client)
+    return (
+        await client.post(
+            f"/api/scenes/{scene_id}/layers",
+            json={"surface_id": surface_id, "effect_id": efecto},
+        )
+    ).json()
+
+
+async def test_el_panel_de_una_capa_trae_los_controles_de_su_efecto(cliente):
+    """Se generan desde el manifiesto, igual que los del efecto global: un
+    efecto con un parametro nuevo aparece sin tocar el frontend."""
+    client, _, _ = cliente
+    capa = await _una_capa(client)
+
+    html = (await client.get(f"/api/layers/{capa['id']}/panel")).text
+
+    assert f'data-params-url="/api/layers/{capa["id"]}/params"' in html
+    assert 'data-param="speed"' in html
+    # La miniatura del efecto, que es como se identifica la capa de un vistazo
+    assert f'/api/effects/{capa["effect_id"]}/preview' in html
+
+
+async def test_el_panel_de_una_capa_que_no_existe_da_404(cliente):
+    client, _, _ = cliente
+    assert (await client.get("/api/layers/999/panel")).status_code == 404
+
+
+async def test_cambiar_un_parametro_de_capa_no_pisa_los_otros(cliente):
+    """Mezcla parcial: mover un slider no puede resetear el resto."""
+    client, app, _ = cliente
+    capa = await _una_capa(client)
+
+    await client.put(f"/api/layers/{capa['id']}/params", json={"params": {"speed": 2.5}})
+    await client.put(f"/api/layers/{capa['id']}/params", json={"params": {"scale": 12.0}})
+
+    # La escritura esta diferida: sin volcarla, la base todavia no los tiene.
+    await app.state.writer.flush()
+    capas = (await client.get(f"/api/scenes/{capa['scene_id']}")).json()["layers"]
+    assert capas[0]["params"] == {"speed": 2.5, "scale": 12.0}
+
+
+async def test_el_parametro_viaja_al_render_antes_de_escribirse_en_disco(cliente):
+    """Lo que se ve viaja siempre; lo que se guarda se difiere (ADR-004).
+
+    Si la escena que se le manda al render se armara solo desde la base, el
+    render recibiria el valor viejo hasta que la escritura diferida se volcara
+    medio segundo despues: el slider se moveria y la proyeccion no.
+    """
+    client, app, enviados = cliente
+    capa = await _una_capa(client)
+    enviados.clear()
+
+    await client.put(f"/api/layers/{capa['id']}/params", json={"params": {"speed": 4.0}})
+
+    escena = [m for m in enviados if m.get("op") == "scene"][-1]["scene"]
+    assert escena["layers"][0]["params"]["speed"] == 4.0
+    # Y todavia no toco la base
+    assert app.state.app_state.layer_params[capa["id"]] == {"speed": 4.0}
+
+
+async def test_muchos_cambios_seguidos_terminan_en_una_sola_escritura(cliente):
+    """Un arrastre genera decenas de valores por segundo. En la Pi la SD es la
+    causa numero uno de muerte, asi que las escrituras se agrupan."""
+    client, app, _ = cliente
+    capa = await _una_capa(client)
+    writer = app.state.writer
+    antes = writer.writes
+
+    for valor in range(10):
+        await client.put(
+            f"/api/layers/{capa['id']}/params", json={"params": {"speed": float(valor)}}
+        )
+
+    assert writer.writes == antes, "no deberia haber escrito todavia"
+    await writer.flush()
+    assert writer.writes - antes == 1, "diez cambios, una sola escritura"
+
+    capas = (await client.get(f"/api/scenes/{capa['scene_id']}")).json()["layers"]
+    assert capas[0]["params"]["speed"] == 9.0, "el ultimo valor no se pierde"
+
+
+async def test_restaurar_descarta_los_overrides(cliente):
+    """Se descartan, no se copian los defaults: asi la capa sigue heredando si
+    el efecto cambia de version (ADR-011)."""
+    client, _, _ = cliente
+    capa = await _una_capa(client)
+    await client.put(f"/api/layers/{capa['id']}/params", json={"params": {"speed": 7.0}})
+
+    await client.post(f"/api/layers/{capa['id']}/params/reset")
+
+    capas = (await client.get(f"/api/scenes/{capa['scene_id']}")).json()["layers"]
+    assert capas[0]["params"] == {}
+
+
+async def test_cada_capa_tiene_sus_propios_parametros(cliente):
+    """Dos capas del mismo efecto sobre la misma cara no comparten valores."""
+    client, app, _ = cliente
+    surface_id, scene_id = await _montar(client)
+    a = (
+        await client.post(
+            f"/api/scenes/{scene_id}/layers",
+            json={"surface_id": surface_id, "effect_id": "waves"},
+        )
+    ).json()
+    b = (
+        await client.post(
+            f"/api/scenes/{scene_id}/layers",
+            json={"surface_id": surface_id, "effect_id": "waves"},
+        )
+    ).json()
+
+    await client.put(f"/api/layers/{a['id']}/params", json={"params": {"speed": 1.0}})
+    await client.put(f"/api/layers/{b['id']}/params", json={"params": {"speed": 9.0}})
+
+    await app.state.writer.flush()
+    escena = (await client.get(f"/api/scenes/{scene_id}")).json()
+    capas = {c["id"]: c["params"] for c in escena["layers"]}
+    assert capas[a["id"]]["speed"] == 1.0
+    assert capas[b["id"]]["speed"] == 9.0
+
+
+async def test_el_fragmento_no_trae_avisos_que_puedan_quedar_viejos(cliente):
+    """Regresion: «Primero hace falta una cara» se renderizaba en el servidor.
+
+    Crear una cara no recarga este fragmento —lo hace Alpine contra la API—,
+    asi que el aviso se quedaba en pantalla **contradiciendo** al boton de
+    agregar capa, que ya estaba habilitado. Lo que dependa del numero de caras
+    tiene que evaluarse en el cliente, que es quien lo sabe al instante.
+    """
+    client, _, _ = cliente
+
+    html = (await client.get("/api/scenes/panel")).text
+
+    assert "Primero hace falta una cara" not in html
+    # Los mensajes que quedan son condicionales de Alpine, no texto fijo
+    assert 'x-show="surfaces.length' in html
+
+
+async def test_sin_caras_el_dashboard_ofrece_crear_una(cliente):
+    """Con cero caras el formulario de capa queda inutil: su boton se ve
+    deshabilitado y se lee como que no existe. En vez de eso se ofrece la
+    salida, que es crear la cara."""
+    client, _, _ = cliente
+
+    html = (await client.get("/")).text
+
+    assert "crear la primera cara" in html
+    assert 'class="sin-caras"' in html
+    # Y el formulario solo aparece cuando hay caras
+    assert 'class="nueva-capa" x-show="surfaces.length"' in html

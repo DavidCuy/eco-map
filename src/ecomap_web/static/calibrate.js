@@ -17,6 +17,10 @@ function workspace(config) {
     surfaces: config.surfaces || [],
     activeId: null,
     activeHandle: null,
+    // Capa elegida: sus parametros ocupan el panel de abajo. Vive en el
+    // cliente porque el servidor no tiene por que saber que estas mirando.
+    layerId: null,
+    aviso: null,
     status: config.status,
     ws: false,
     saving: false,
@@ -126,6 +130,13 @@ function workspace(config) {
       this.$nextTick(() => this.draw());
       new ResizeObserver(() => this.draw()).observe(this.$refs.stage);
       window.addEventListener('keydown', (e) => this.onKey(e));
+
+      // El orden de las capas se cambia arrastrando. Hay que volver a
+      // engancharlo después de cada swap de HTMX: el <ol> es nuevo cada vez.
+      this.engancharOrden();
+      this.engancharOrdenCaras();
+      this.preseleccionarEfecto();
+      document.body.addEventListener('htmx:afterSwap', () => this.engancharOrden());
     },
 
     // --- telemetría ---
@@ -142,6 +153,146 @@ function workspace(config) {
         if (msg.type === 'status') this.status = msg;
         if (msg.ev === 'calib') this.onCalib(msg);
       };
+    },
+
+    // --- orden de las capas ---
+    //
+    // Con flechas hacía falta un viaje al servidor por cada posición, y en el
+    // celular los botones quedaban diminutos. Arrastrando se ve el resultado
+    // mientras se mueve.
+
+    engancharOrden() {
+      const lista = document.getElementById('layers-sortable');
+      if (!lista || typeof Sortable === 'undefined') return;
+      if (lista._sortable) lista._sortable.destroy();
+
+      lista._sortable = Sortable.create(lista, {
+        // Solo las capas: el <li> del mensaje "esta cara no tiene capas" no
+        // es arrastrable ni sirve de destino.
+        draggable: 'li[data-id]',
+        handle: '.tirador',
+        animation: 150,
+        ghostClass: 'arrastrando',
+        // Siempre el modo de respaldo, tambien en escritorio: la API nativa
+        // de drag-and-drop del navegador no existe para el dedo, asi que con
+        // ella el comportamiento seria distinto en el celular que en la
+        // laptop. Uno solo es mas facil de ajustar y de probar.
+        forceFallback: true,
+        // El dedo necesita un instante de presión antes de arrastrar, o cada
+        // intento de hacer scroll mueve una capa.
+        delay: 120,
+        delayOnTouchOnly: true,
+        onEnd: () => this.guardarOrden(lista),
+      });
+    },
+
+    async guardarOrden(lista) {
+      // El orden del DOM **ya es** el orden nuevo, y están todas las capas de
+      // la escena aunque solo se vean las de la cara activa: las ocultas se
+      // quedaron donde estaban. El backend exige la lista completa.
+      const ids = [...lista.querySelectorAll('li[data-id]')].map((li) => Number(li.dataset.id));
+      if (!ids.length) return;
+      try {
+        await this.api('PUT', `/api/scenes/${lista.dataset.scene}/layers/order`, {
+          layer_ids: ids,
+        });
+      } catch (e) {
+        // El servidor manda; si rechazó el orden, se recarga el fragmento
+        // para no dejar la pantalla mintiendo.
+        if (window.htmx) htmx.ajax('GET', '/api/scenes/panel', '#scenes');
+      }
+    },
+
+    // --- vuelta desde la pagina de efectos ---
+
+    preseleccionarEfecto() {
+      // Al guardar un efecto nuevo se vuelve acá con `?efecto=<id>`. Dejarlo
+      // elegido en el formulario de capa ahorra buscarlo en la lista, que es
+      // lo único que uno quiere hacer justo después de crearlo.
+      const id = new URLSearchParams(location.search).get('efecto');
+      if (!id) return;
+      const select = document.querySelector('.nueva-capa select[name=effect_id]');
+      if (select && [...select.options].some((o) => o.value === id)) {
+        select.value = id;
+        this.aviso = 'Efecto «' + id + '» listo para usar: elegí una cara y agregá la capa.';
+      }
+      // Se limpia la URL: recargar no deberia volver a avisar de algo viejo.
+      history.replaceState({}, '', location.pathname);
+    },
+
+    // --- orden de las caras ---
+    //
+    // La tira es la navegacion entre caras: el canvas muestra una por vez.
+    // Poder ordenarlas como estan fisicamente —de izquierda a derecha segun
+    // se ve el objeto— es la diferencia entre buscar y señalar.
+    //
+    // No cambia lo que se proyecta: el apilado lo decide el z_order de las
+    // capas. Por eso no se le avisa al render.
+
+    engancharOrdenCaras() {
+      const tira = this.$refs.strip;
+      if (!tira || typeof Sortable === 'undefined') return;
+
+      Sortable.create(tira, {
+        // Los chips los genera un `x-for`, que deja su <template> como primer
+        // hijo. Sin esto, Sortable lo trataria como un elemento mas.
+        draggable: '[data-id]',
+        handle: '.tirador',
+        animation: 150,
+        ghostClass: 'arrastrando',
+        forceFallback: true,
+        delay: 120,
+        delayOnTouchOnly: true,
+        onEnd: (evt) => this.guardarOrdenCaras(tira, evt),
+      });
+    },
+
+    async guardarOrdenCaras(tira, evt) {
+      if (evt.oldIndex === evt.newIndex) return;
+      const previo = [...this.surfaces];
+      const ids = [...tira.querySelectorAll('[data-id]')].map((el) => Number(el.dataset.id));
+      if (ids.length !== previo.length) return;
+
+      // Se deshace el movimiento de Sortable **antes** de tocar el array, y
+      // moviendo un solo nodo: la inversa exacta de lo que hizo.
+      //
+      // Los chips los pinta un `x-for`. Si el DOM se mueve por un lado y el
+      // array por el otro, Alpine reordena sobre lo ya movido y la tira
+      // termina como estaba, o peor: reusa mal sus nodos y deja uno vacio.
+      // El array manda; el DOM lo pinta Alpine.
+      const sinItem = [...tira.querySelectorAll('[data-id]')].filter((el) => el !== evt.item);
+      tira.insertBefore(evt.item, sinItem[evt.oldIndex] || null);
+
+      this.surfaces = ids.map((id) => previo.find((s) => s.id === id)).filter(Boolean);
+
+      try {
+        await this.api('PUT', '/api/surfaces/order', { surface_ids: ids });
+      } catch (e) {
+        this.surfaces = previo;
+      }
+    },
+
+    // --- blackout ---
+    //
+    // Apagar y prender la proyección es lo que más se toca durante un montaje,
+    // así que vive sobre el preview y no dentro de un panel plegado. Es un
+    // interruptor y nada más: no arrastra el efecto global, que es otra cosa.
+
+    get blackout() {
+      return !!this.status.blackout;
+    },
+
+    async toggleBlackout() {
+      const nuevo = !this.status.blackout;
+      // Se pinta el estado nuevo sin esperar la respuesta: el ida y vuelta es
+      // de milisegundos, pero un botón de apagado que tarda en reaccionar se
+      // toca dos veces.
+      this.status = { ...this.status, blackout: nuevo };
+      try {
+        await this.api('POST', '/api/system/blackout', { on: nuevo });
+      } catch (e) {
+        this.status = { ...this.status, blackout: !nuevo };
+      }
     },
 
     // --- auto-calibración ---
@@ -324,10 +475,12 @@ function workspace(config) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, r.width, r.height);
 
-      for (const s of this.surfaces) {
-        const activa = s.id === this.activeId;
-        this.drawMesh(ctx, s, activa);
-      }
+      // Solo la cara en la que se está trabajando. Dibujar todas encima del
+      // mismo preview las mezclaba visualmente: con dos o tres caras
+      // superpuestas no se distingue qué malla es cuál, y los handles de una
+      // caen sobre las líneas de otra. Se trabaja una por vez; la tira de
+      // abajo cambia de cara.
+      if (this.active) this.drawMesh(ctx, this.active, true);
     },
 
     drawMesh(ctx, surface, activa) {

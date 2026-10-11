@@ -96,6 +96,42 @@ def _marcar_faltantes(conn: sqlite3.Connection, vistos: set[str]) -> list[str]:
     return faltantes
 
 
+def olvidar(conn: sqlite3.Connection, effect_id: str) -> bool:
+    """Saca el efecto del espejo si ninguna capa lo usa.
+
+    Al borrar el directorio, el efecto quedaria para siempre en el catalogo
+    como "no disponible" (ADR-011: no se borran porque hay capas que los
+    referencian). Eso es correcto **mientras alguna capa lo use**; si no lo
+    usa nadie, es basura que se acumula cada vez que se prueba y se descarta
+    un efecto subido.
+
+    Devuelve si lo saco.
+    """
+    usos = conn.execute(
+        "SELECT COUNT(*) AS n FROM layer WHERE effect_id = ?", (effect_id,)
+    ).fetchone()["n"]
+    if usos:
+        return False
+    conn.execute("DELETE FROM effect WHERE id = ?", (effect_id,))
+    conn.commit()
+    return True
+
+
+def fuente_de(conn: sqlite3.Connection, effect_id: str) -> str | None:
+    """De que clase de archivo salio, segun el espejo.
+
+    Se mira el espejo y no el disco a proposito: un efecto subido cuyo
+    directorio ya no esta tiene que poder borrarse del catalogo igual.
+    """
+    fila = conn.execute("SELECT manifest FROM effect WHERE id = ?", (effect_id,)).fetchone()
+    if fila is None:
+        return None
+    try:
+        return (json.loads(fila["manifest"]).get("source") or {}).get("kind")
+    except json.JSONDecodeError:
+        return None
+
+
 def listar(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     """Catalogo desde el espejo, con el manifiesto ya parseado."""
     filas = conn.execute(
@@ -118,6 +154,10 @@ def listar(conn: sqlite3.Connection) -> list[dict[str, Any]]:
                 "cost": fila["cost"],
                 "params": manifiesto.get("params", []),
                 "available": bool(fila["available"]),
+                # Que clase de archivo lo genero, si es que lo genero uno.
+                # Es lo que distingue un efecto subido de uno que vino con el
+                # sistema, y por tanto si se puede borrar desde la web.
+                "source_kind": (manifiesto.get("source") or {}).get("kind"),
             }
         )
     return salida

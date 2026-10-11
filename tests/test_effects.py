@@ -566,3 +566,58 @@ async def test_el_catalogo_expone_needs_feedback(cliente):
     echo = next(e for e in cuerpo if e["id"] == "camera_echo")
     assert echo["needs_feedback"] is True
     assert echo["needs_camera"] is True
+
+
+# --- los efectos del sistema tienen que estar versionados -----------------
+
+
+def test_todo_efecto_del_sistema_esta_en_git():
+    """Guarda la trampa que deja el .gitignore.
+
+    Los efectos subidos desde la web escriben su directorio dentro de
+    `effects/`, que en desarrollo es un bind mount al repo. Para que no se
+    cuelen al proyecto se ignora `effects/*` y se listan a mano los que vienen
+    con el sistema.
+
+    El costo: agregar un efecto nuevo al proyecto **y olvidar su linea** lo
+    deja fuera del repo sin que nada avise — `git status` queda limpio y el
+    efecto no existe para nadie mas. Esto lo detecta.
+
+    Un efecto subido se reconoce porque su manifiesto declara `source`; esos
+    si deben estar ignorados.
+    """
+    import subprocess
+
+    raiz = Path(__file__).resolve().parent.parent
+    efectos = raiz / "effects"
+    try:
+        salida = subprocess.run(  # noqa: S603 - comando fijo, repo local
+            ["git", "ls-files", "effects/"],
+            cwd=raiz,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        pytest.skip("sin git disponible")
+    if salida.returncode != 0:
+        pytest.skip("no es un repositorio git")
+
+    versionados = {linea.split("/")[1] for linea in salida.stdout.splitlines() if "/" in linea}
+
+    faltan = []
+    for directorio in sorted(p for p in efectos.iterdir() if p.is_dir()):
+        manifiesto = directorio / "effect.json"
+        if not manifiesto.exists():
+            continue
+        datos = json.loads(manifiesto.read_text(encoding="utf-8"))
+        if datos.get("source"):
+            continue  # subido desde la web: va ignorado a proposito
+        if directorio.name not in versionados:
+            faltan.append(directorio.name)
+
+    assert not faltan, (
+        f"estos efectos del sistema no estan en git: {faltan}. "
+        "Agregar `!effects/<nombre>/` al .gitignore, o no se versionan."
+    )

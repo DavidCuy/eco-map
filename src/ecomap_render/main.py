@@ -129,7 +129,7 @@ class RenderApp:
             log.info("blackout: %s", self.blackout)
         elif operation == OP_EFFECTS_RELOAD:
             if self.pipeline is not None:
-                self.pipeline.library.reload()
+                self.pipeline.reload_library()
                 self._publish_effects()
         elif operation == OP_EFFECT:
             self._select_effect(str(message.get("id", "")), dict(message.get("params") or {}))

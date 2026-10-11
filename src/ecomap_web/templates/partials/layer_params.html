@@ -1,0 +1,41 @@
+{% import "macros/params.html" as params %}
+{# Parámetros de la capa seleccionada.
+
+   Antes esto no existía: los únicos sliders del dashboard eran los del efecto
+   global, que ni siquiera se proyecta cuando la escena tiene capas. Cada capa
+   corría con los valores por defecto de su efecto y no había forma de
+   cambiarlos, aunque la base los guardaba (`layer.params`) y la API los
+   aceptaba desde siempre.
+
+   `data-params-url` es lo que hace que `params.js` mande los valores acá y no
+   al efecto global: el control es el mismo, cambia a dónde escribe. #}
+
+<div class="capa-params" data-params-url="/api/layers/{{ layer.id }}/params">
+  <header>
+    <img class="capa-thumb" src="/api/effects/{{ layer.effect_id }}/preview"
+         alt="" loading="lazy" onerror="this.remove()">
+    <span>
+      <strong>{{ layer.effect_name }}</strong>
+      <small class="muted">sobre {{ layer.surface_name }}</small>
+    </span>
+  </header>
+
+  {% if effect and effect.params %}
+  {% for param in effect.params %}
+  {{ params.control(param, values.get(param.key)) }}
+  {% endfor %}
+
+  <button class="secondary outline"
+          hx-post="/api/layers/{{ layer.id }}/params/reset"
+          hx-target="#capa-params" hx-swap="innerHTML">
+    Restaurar valores por defecto
+  </button>
+  {% elif effect %}
+  <small class="muted">Este efecto no tiene parámetros.</small>
+  {% else %}
+  <small class="error">
+    El efecto <code>{{ layer.effect_id }}</code> no está en el catálogo: falta
+    en disco o no compiló.
+  </small>
+  {% endif %}
+</div>

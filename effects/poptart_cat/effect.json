@@ -1,0 +1,15 @@
+{
+  "id": "poptart_cat",
+  "name": "poptart cat",
+  "version": "1.0.0",
+  "tags": [
+    "gif"
+  ],
+  "needs_camera": false,
+  "cost": "medium",
+  "params": [],
+  "source": {
+    "kind": "gif",
+    "file": "media.gif"
+  }
+}

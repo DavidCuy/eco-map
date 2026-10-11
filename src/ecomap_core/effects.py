@@ -62,6 +62,33 @@ class EffectParam(BaseModel):
         return f"{PARAM_PREFIX}{self.key}"
 
 
+MediaKind = Literal["image", "gif", "video"]
+
+# Que puede subirse como efecto. No es una lista de "formatos soportados" sino
+# de los que se probaron: OpenCV abre muchos mas, pero lo que no se probo no se
+# ofrece.
+EXTENSIONES = {
+    "image": {".jpg", ".jpeg", ".png", ".webp", ".bmp"},
+    "gif": {".gif"},
+    "video": {".mp4", ".webm", ".mov", ".m4v"},
+}
+
+
+class EffectSource(BaseModel):
+    """De donde sale la imagen de un efecto hecho a partir de un archivo.
+
+    Los efectos clasicos pintan con codigo; estos pintan lo que trae un
+    archivo. El shader es el mismo en los dos casos —lo genera el web al
+    crearlo— y la diferencia para el render es que hay una textura que
+    alimentar: `u_media`.
+    """
+
+    kind: MediaKind
+    # Nombre del archivo dentro del directorio del efecto, no una ruta: el
+    # directorio se mueve entre equipos y una ruta absoluta no sobrevive.
+    file: str = Field(pattern=r"^[A-Za-z0-9._-]{1,80}$")
+
+
 class EffectManifest(BaseModel):
     id: str = Field(pattern=r"^[a-z][a-z0-9_]{0,40}$")
     name: str
@@ -73,6 +100,8 @@ class EffectManifest(BaseModel):
     needs_feedback: bool = False
     cost: Literal["low", "medium", "high"] = "low"
     params: list[EffectParam] = Field(default_factory=list)
+    # Presente solo en los efectos hechos a partir de un archivo subido.
+    source: EffectSource | None = None
 
     def defaults(self) -> dict[str, Any]:
         return {p.key: p.default for p in self.params}
@@ -171,6 +200,9 @@ uniform sampler2D u_cam;
 // Frame anterior de esta misma capa. Solo tiene contenido util si el
 // manifiesto declara `needs_feedback`; si no, es negro.
 uniform sampler2D u_prev;
+// Imagen, gif o video del efecto, cuando el manifiesto declara `source`. Si no
+// lo declara, es negro: un shader que no la usa no paga nada por ella.
+uniform sampler2D u_media;
 """
 
 _MAIN = """
@@ -178,6 +210,61 @@ void main() {
     f_color = vec4(effect(v_uv), 1.0);
 }
 """
+
+
+# Shader de una imagen con desplazamiento. El angulo va en grados porque es lo
+# que se pone en la UI; `fract` hace que la imagen se repita al salirse, que es
+# lo que convierte un desplazamiento en un movimiento continuo.
+_FRAG_IMAGEN = """vec3 effect(vec2 uv) {
+    float a = radians(p_angle);
+    vec2 direccion = vec2(cos(a), sin(a));
+    return texture(u_media, fract(uv + direccion * p_speed * u_time)).rgb;
+}
+"""
+
+# Un gif o un video ya traen su propio movimiento: agregarle otro encima solo
+# lo ensucia. Van tal cual, sin parametros.
+_FRAG_REPRODUCIR = """vec3 effect(vec2 uv) {
+    return texture(u_media, uv).rgb;
+}
+"""
+
+# Parametros de una imagen en movimiento. Velocidad 0 la deja quieta, que es
+# un caso util: subir una imagen fija y ya.
+PARAMS_IMAGEN = [
+    {
+        "key": "speed",
+        "label": "Velocidad",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.1,
+        "step": 0.01,
+    },
+    {
+        "key": "angle",
+        "label": "Angulo",
+        "type": "float",
+        "min": 0.0,
+        "max": 360.0,
+        "default": 0.0,
+        "step": 1.0,
+    },
+]
+
+
+def media_fragment(kind: MediaKind) -> str:
+    """El GLSL de un efecto hecho a partir de un archivo.
+
+    Se genera y se escribe a disco al crearlo, en vez de resolverse al cargar:
+    asi el efecto queda igual de inspeccionable que uno escrito a mano, y el
+    render no tiene que saber que existen dos clases de efecto.
+    """
+    return _FRAG_IMAGEN if kind == "image" else _FRAG_REPRODUCIR
+
+
+def media_params(kind: MediaKind) -> list[dict[str, Any]]:
+    return list(PARAMS_IMAGEN) if kind == "image" else []
 
 
 def build_fragment(effect: Effect, header: str) -> str:

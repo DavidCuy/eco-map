@@ -189,3 +189,60 @@ async def test_la_version_de_calibracion_sube_con_cada_cambio(cliente):
     despues = version()
     await client.post(f"/api/surfaces/{surface_id}/reset")
     assert version() > despues
+
+
+# --- orden de la tira de caras -------------------------------------------
+
+
+async def test_las_caras_salen_en_el_orden_guardado(cliente):
+    """La tira de abajo del canvas es la navegacion entre caras: con el canvas
+    mostrando una por vez, poder ordenarlas como estan fisicamente es la
+    diferencia entre buscar y señalar."""
+    client = cliente[0]
+    a = (await client.post("/api/surfaces", json={"name": "a"})).json()
+    b = (await client.post("/api/surfaces", json={"name": "b"})).json()
+    c = (await client.post("/api/surfaces", json={"name": "c"})).json()
+
+    respuesta = await client.put(
+        "/api/surfaces/order", json={"surface_ids": [c["id"], a["id"], b["id"]]}
+    )
+
+    assert respuesta.status_code == 200
+    assert [s["name"] for s in respuesta.json()] == ["c", "a", "b"]
+    # Y se mantiene al volver a pedirlas
+    assert [s["name"] for s in (await client.get("/api/surfaces")).json()] == ["c", "a", "b"]
+
+
+async def test_una_cara_nueva_va_al_final(cliente):
+    """Aparecer en el medio de una tira ya ordenada seria desconcertante."""
+    client = cliente[0]
+    a = (await client.post("/api/surfaces", json={"name": "a"})).json()
+    b = (await client.post("/api/surfaces", json={"name": "b"})).json()
+    await client.put("/api/surfaces/order", json={"surface_ids": [b["id"], a["id"]]})
+
+    await client.post("/api/surfaces", json={"name": "nueva"})
+
+    assert [s["name"] for s in (await client.get("/api/surfaces")).json()] == ["b", "a", "nueva"]
+
+
+async def test_un_orden_de_caras_incompleto_se_rechaza(cliente):
+    client = cliente[0]
+    a = (await client.post("/api/surfaces", json={"name": "a"})).json()
+    await client.post("/api/surfaces", json={"name": "b"})
+
+    respuesta = await client.put("/api/surfaces/order", json={"surface_ids": [a["id"]]})
+
+    assert respuesta.status_code == 422
+
+
+async def test_el_orden_de_las_caras_no_molesta_al_render(cliente):
+    """Es navegacion del dashboard: lo que se proyecta no cambia, y mandarle
+    la escena entera al render por esto seria hacerlo trabajar al pedo."""
+    client, _app, enviados = cliente
+    a = (await client.post("/api/surfaces", json={"name": "a"})).json()
+    b = (await client.post("/api/surfaces", json={"name": "b"})).json()
+    enviados.clear()
+
+    await client.put("/api/surfaces/order", json={"surface_ids": [b["id"], a["id"]]})
+
+    assert [m for m in enviados if m.get("op") == "scene"] == []

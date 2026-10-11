@@ -5,11 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Eco-Map{% endblock %}</title>
   <link rel="stylesheet" href="/static/vendor/pico.min.css">
-  <link rel="stylesheet" href="/static/app.css">
+  {# `?v=` con la version: sin esto el navegador se queda con el CSS y el JS
+     viejos despues de actualizar, y el dashboard aparece a medias sin que
+     nada lo explique. Los de vendor no lo llevan: no cambian. #}
+  <link rel="stylesheet" href="/static/app.css?v={{ status.version }}">
   <script src="/static/vendor/htmx.min.js"></script>
   <script src="/static/vendor/htmx-ext-json-enc.js"></script>
+  {# Antes que Alpine y sin defer: el reordenamiento se engancha desde
+     calibrate.js al arrancar y tras cada swap de HTMX. #}
+  <script src="/static/vendor/sortable.min.js"></script>
   <script src="/static/vendor/alpine.min.js" defer></script>
-  <script src="/static/params.js" defer></script>
+  <script src="/static/params.js?v={{ status.version }}" defer></script>
 </head>
 <body>
   <main class="container">
@@ -17,6 +23,7 @@
       <ul><li><strong>Eco-Map</strong></li></ul>
       <ul>
         <li><a href="/" class="secondary">Dashboard</a></li>
+        <li><a href="/efectos" class="secondary">Efectos</a></li>
         <li><a href="/docs" class="secondary">API</a></li>
       </ul>
     </nav>

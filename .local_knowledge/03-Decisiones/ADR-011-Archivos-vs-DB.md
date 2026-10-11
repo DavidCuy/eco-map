@@ -27,6 +27,18 @@ Tres clases de datos: configuración pequeña y consultable (superficies, capas,
 
 Regla: **si pesa más de ~64 KB o se edita con un editor de texto, es un archivo.** La DB guarda la ruta relativa y los metadatos.
 
+### Enmienda (2026-10-09): las escenas guardadas son archivos
+
+La tabla de arriba dice que las escenas van en SQLite, y para la **escena de trabajo** sigue siendo así: hay una, siempre, y se autoguarda sola mientras se la toca.
+
+Lo que cambia es que una escena **guardada con nombre** pasa a ser un archivo JSON en `scenes_dir`. La regla original no lo contemplaba porque mira el tamaño y cómo se edita; acá pesa otra cosa: la escena guardada es un **documento del operador**, no estado interno del sistema. Se copia a otro equipo, se respalda fuera del aparato, se manda por chat. Nada de eso se hace con una fila.
+
+El archivo lleva la instalación entera —caras con su malla, capas, calibración y efecto global— y abrirlo reemplaza todo. Las capas referencian las caras **por nombre**, no por id: los ids no significan nada fuera de la base que los generó.
+
+Eso cubre también lo que pedía el export/import de configuración (#29), que deja de necesitar su propio formato.
+
+**Consecuencia que hay que tener presente:** abrir una escena pisa la calibración física, que cuesta veinte minutos de ajustar esquinas. Por eso antes de abrir se guarda siempre un respaldo automático, y se conservan los últimos diez. Ver [[Modulo-Calibracion]].
+
 ## Sincronización catálogo ↔ disco
 
 Al arrancar el web, y con `POST /api/effects/reload`, se escanea el volumen de efectos:

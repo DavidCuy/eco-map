@@ -28,6 +28,7 @@ from ecomap_web.routers import (
     effects,
     pages,
     scenes,
+    snapshots,
     surfaces,
     system,
     ws,
@@ -65,6 +66,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         state.effect = get_setting(conn, "active_effect", "grid_test")
         state.camera_source = get_setting(conn, "camera", settings.camera)
         state.effect_params = json.loads(get_setting(conn, "active_effect_params", "{}") or "{}")
+
+        # Siempre tiene que haber una escena de trabajo. Al sacar el boton
+        # "+ escena" de la UI, un equipo recien instalado se quedaba sin
+        # ninguna y sin forma de crear capas: el panel aparecia vacio y sin
+        # explicacion. Lo que se esta tocando es "la escena actual" y existe
+        # desde el primer arranque; guardarla con nombre es otra cosa.
+        if not scene_service.listar(conn):
+            scene_service.crear(conn, "escena")
+            log.info("escena de trabajo creada")
 
         # El catalogo se espeja al arrancar: si alguien copio un efecto nuevo
         # al volumen con el sistema apagado, aparece sin tener que recargar.
@@ -160,6 +170,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(surfaces.router)
     app.include_router(effects.router)
     app.include_router(scenes.router)
+    app.include_router(snapshots.router)
     app.include_router(calibration.router)
     app.include_router(ws.router)
     return app
