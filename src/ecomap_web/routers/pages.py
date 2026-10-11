@@ -67,7 +67,6 @@ def dashboard(
     from ecomap_web.routers.camera import devices_out
     from ecomap_web.routers.effects import catalogo, contexto_controles
     from ecomap_web.services import scenes as scene_service
-    from ecomap_web.services import snapshots as snapshot_service
     from ecomap_web.services import surfaces as surface_service
 
     status = build_status(bus, state, request.app.state.version)
@@ -80,6 +79,11 @@ def dashboard(
     calibracion = ultima_calibracion(db)
     workspace_config = {
         "surfaces": surface_service.listar(db),
+        # Nombre del documento abierto: es la unica referencia que hay de
+        # sobre que escena se esta trabajando.
+        "sceneName": (
+            next((e["name"] for e in scene_service.listar(db) if e["is_active"]), "escena")
+        ),
         # Con homografia valida, el canvas puede mostrar la vista de la camara
         # y transformar los puntos: dibujar sobre el objeto real es mas
         # intuitivo que sobre la salida del proyector (US-25).
@@ -105,11 +109,15 @@ def dashboard(
             "camera_stream": f"{preview_url}camera",
             "effects": catalogo(db, state),
             "scenes": scene_service.listar(db),
-            "snapshots": snapshot_service.listar_archivos(settings.scenes_dir),
             "scene": next(
                 (e for e in scene_service.listar(db) if e["is_active"]), None
             ),
             "surfaces": surface_service.listar(db),
+        # Nombre del documento abierto: es la unica referencia que hay de
+        # sobre que escena se esta trabajando.
+        "sceneName": (
+            next((e["name"] for e in scene_service.listar(db) if e["is_active"]), "escena")
+        ),
             # Sin capas el efecto va a pantalla completa, que es intencional y
             # util para apuntar el proyector. El problema es que, con caras ya
             # calibradas, es indistinguible de que el warp este roto: por eso

@@ -21,6 +21,11 @@ function workspace(config) {
     // cliente porque el servidor no tiene por que saber que estas mirando.
     layerId: null,
     aviso: null,
+    // El documento abierto. Guardar baja una copia a la computadora; abrir
+    // sube una. No hay lista: el nombre de acá es la única referencia.
+    nombreEscena: config.sceneName || 'escena',
+    puedeDeshacer: false,
+    legacy: [],
     status: config.status,
     ws: false,
     saving: false,
@@ -136,6 +141,8 @@ function workspace(config) {
       this.engancharOrden();
       this.engancharOrdenCaras();
       this.preseleccionarEfecto();
+      this.preguntarPorEscena();
+      this.recuperarAvisoDeApertura();
       document.body.addEventListener('htmx:afterSwap', () => this.engancharOrden());
     },
 
@@ -201,6 +208,91 @@ function workspace(config) {
         // para no dejar la pantalla mintiendo.
         if (window.htmx) htmx.ajax('GET', '/api/scenes/panel', '#scenes');
       }
+    },
+
+    // --- la escena como documento ---
+
+    get escenaVacia() {
+      // Sin caras no hay nada configurado: una escena es, antes que nada,
+      // dónde cae la proyección.
+      return this.surfaces.length === 0;
+    },
+
+    recuperarAvisoDeApertura() {
+      // Lo dejó `abrirEscena` justo antes de recargar. Se consume una vez:
+      // deshacer es para el momento siguiente a la acción, no algo que
+      // quede ahí.
+      const crudo = sessionStorage.getItem('ecomap:apertura');
+      if (!crudo) return;
+      sessionStorage.removeItem('ecomap:apertura');
+      try {
+        const { texto, deshacer } = JSON.parse(crudo);
+        this.aviso = texto;
+        this.puedeDeshacer = !!deshacer;
+      } catch (e) { /* un valor corrupto no debería romper el arranque */ }
+    },
+
+    async preguntarPorEscena() {
+      if (!this.escenaVacia) return;
+      // Las que quedaron guardadas del lado del servidor en una versión
+      // anterior: se ofrecen para bajarlas y la línea desaparece sola cuando
+      // no queda ninguna.
+      try {
+        const res = await fetch('/api/scene/legacy');
+        if (res.ok) this.legacy = (await res.json()).snapshots || [];
+      } catch (e) { /* sin internet del servidor no pasa nada */ }
+      this.$refs.dialogoEscena?.showModal();
+    },
+
+    empezarDeCero() {
+      this.$refs.dialogoEscena?.close();
+      this.addSurface();
+    },
+
+    guardarEscena() {
+      // Una descarga del navegador: el archivo queda donde la persona elija,
+      // no en el equipo que proyecta.
+      window.location.href = '/api/scene/file';
+      this.aviso = 'Descargando la escena. El archivo queda donde lo guardes.';
+    },
+
+    async abrirEscena(evento) {
+      const archivo = evento.target.files[0];
+      evento.target.value = '';  // permite reabrir el mismo archivo
+      if (!archivo) return;
+      if (!this.escenaVacia &&
+          !confirm('Abrir reemplaza las caras, las capas y la calibración actuales. ' +
+                   'Se puede deshacer. ¿Seguir?')) return;
+
+      const cuerpo = new FormData();
+      cuerpo.append('archivo', archivo);
+      try {
+        const res = await fetch('/api/scene/file', { method: 'POST', body: cuerpo });
+        if (!res.ok) throw new Error((await res.json()).detail || `error ${res.status}`);
+        const informe = await res.json();
+        this.$refs.dialogoEscena?.close();
+        this.puedeDeshacer = informe.puede_deshacer;
+        this.nombreEscena = informe.nombre;
+        const texto = `Abierta «${informe.nombre}»: ${informe.caras} caras, ${informe.capas} capas` +
+          (informe.omitidas?.length ? `. ${informe.omitidas.length} capas omitidas` : '');
+        // El aviso viaja por sessionStorage porque lo que sigue es recargar,
+        // y sin esto el «deshacer» se perdía antes de que nadie lo viera.
+        // Recargar es necesario: cambiaron caras, capas y calibración de
+        // golpe, y repintar cada parte a mano sería reimplementar la página.
+        sessionStorage.setItem('ecomap:apertura', JSON.stringify({
+          texto, deshacer: informe.puede_deshacer,
+        }));
+        location.reload();
+      } catch (e) {
+        this.error = e.message;
+      }
+    },
+
+    async deshacerApertura() {
+      try {
+        await this.api('POST', '/api/scene/undo');
+        location.reload();
+      } catch (e) { /* el error ya quedó en this.error */ }
     },
 
     // --- vuelta desde la pagina de efectos ---

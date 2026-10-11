@@ -27,7 +27,7 @@ Tres clases de datos: configuración pequeña y consultable (superficies, capas,
 
 Regla: **si pesa más de ~64 KB o se edita con un editor de texto, es un archivo.** La DB guarda la ruta relativa y los metadatos.
 
-### Enmienda (2026-10-09): las escenas guardadas son archivos
+### Enmienda (2026-10-09, corregida el 10): la escena es un documento
 
 La tabla de arriba dice que las escenas van en SQLite, y para la **escena de trabajo** sigue siendo así: hay una, siempre, y se autoguarda sola mientras se la toca.
 
@@ -36,6 +36,21 @@ Lo que cambia es que una escena **guardada con nombre** pasa a ser un archivo JS
 El archivo lleva la instalación entera —caras con su malla, capas, calibración y efecto global— y abrirlo reemplaza todo. Las capas referencian las caras **por nombre**, no por id: los ids no significan nada fuera de la base que los generó.
 
 Eso cubre también lo que pedía el export/import de configuración (#29), que deja de necesitar su propio formato.
+
+**Corrección del 10/10.** El primer intento guardaba las escenas **en el equipo** y las listaba en un panel. Estaba mal, y el motivo es de uso, no técnico: un historial al lado del documento abierto **compite con él**. Mirando la pantalla dejaba de estar claro sobre cuál se trabaja, que es justo lo que el modelo de documento tiene que dejar obvio.
+
+Ahora es un documento y nada más:
+
+| | |
+|---|---|
+| Guardar | descarga el JSON **a la computadora de quien lo usa** |
+| Abrir | sube un archivo y lo aplica |
+| Autoguardado | sigue en SQLite: no existe el estado «sin guardar» |
+| Lista de escenas | no hay |
+
+Lo único que queda del lado del servidor son los **respaldos automáticos** de antes de abrir. No se listan ni se navegan: son lo que hace que exista «deshacer», que es otra cosa que un historial. Abrir reemplaza la calibración, y equivocarse de archivo no debería costar veinte minutos de volver a ajustar esquinas.
+
+Si al abrir el dashboard no hay ninguna cara, sale un modal preguntando si abrir una escena o empezar de cero. Antes había que adivinar que el camino era «+ cara».
 
 **Consecuencia que hay que tener presente:** abrir una escena pisa la calibración física, que cuesta veinte minutos de ajustar esquinas. Por eso antes de abrir se guarda siempre un respaldo automático, y se conservan los últimos diez. Ver [[Modulo-Calibracion]].
 

@@ -27,7 +27,13 @@
 
   <p x-show="error" class="error" x-text="error"></p>
   {# Vuelta desde la página de efectos con uno recién guardado. #}
-  <p x-show="aviso" class="aviso" x-text="aviso"></p>
+  <p x-show="aviso" class="aviso">
+    <span x-text="aviso"></span>
+    {# Abrir reemplaza la calibración. El respaldo se toma siempre; esto es
+       lo único que lo hace alcanzable, y solo en el momento siguiente. #}
+    <button x-show="puedeDeshacer" class="secondary outline"
+            @click="deshacerApertura()">Deshacer</button>
+  </p>
 
   {% if fallback_activo %}
   {# El efecto a pantalla completa sin capas es intencional, pero con caras ya
@@ -37,6 +43,23 @@
     Agregá una capa en <em>Capas de la escena actual</em> para que el efecto se deforme sobre ellas.
   </p>
   {% endif %}
+
+  {# La escena es un documento: se abre y se guarda como archivo, y lo que se
+     está tocando se autoguarda solo. No hay lista de escenas guardadas a
+     propósito — un historial al lado del documento abierto compite con él, y
+     deja de estar claro sobre cuál se trabaja. El nombre, acá, alcanza. #}
+  <div class="barra-escena">
+    <span class="nombre-escena">
+      <small class="muted">escena</small>
+      <strong x-text="nombreEscena"></strong>
+    </span>
+    <span class="acciones">
+      <button class="secondary outline" @click="$refs.archivoEscena.click()">Abrir…</button>
+      <button class="secondary outline" @click="guardarEscena()">Guardar</button>
+    </span>
+    <input type="file" accept="application/json,.json" x-ref="archivoEscena" hidden
+           @change="abrirEscena($event)">
+  </div>
 
   {# Barra sobre el preview: lo que se toca sin dejar de mirar la proyección.
      El blackout está acá y no dentro de un panel porque apagar y prender es
@@ -164,14 +187,6 @@
     {% endif %}
   </details>
 
-  {# Escenas guardadas: documentos, no filas. Lo que se está tocando ya es la
-     escena; esto es para quedarse con una copia y volver a ella. #}
-  <details class="panel">
-    <summary>Escenas guardadas</summary>
-    <div id="snapshots">
-      {% include "partials/snapshots.html" %}
-    </div>
-  </details>
 
   <details class="panel">
     <summary>Cámara</summary>
@@ -228,7 +243,34 @@
       {% endfor %}
     </ul>
   </details>
+  {# Al abrir el dashboard sin nada configurado, lo primero no es un canvas
+     vacío sino la pregunta que corresponde: ¿abrís una escena o empezás de
+     cero? Antes había que adivinar que el camino era «+ cara». #}
+  <dialog x-ref="dialogoEscena" class="dialogo-escena">
+    <article>
+      <header><strong>No hay ninguna escena configurada</strong></header>
+      <p>
+        Podés abrir una escena guardada —trae las caras con su calibración, las
+        capas y la homografía— o empezar de cero creando la primera cara.
+      </p>
+      <footer>
+        <button @click="$refs.archivoEscena.click()">Abrir una escena…</button>
+        <button class="secondary outline" @click="empezarDeCero()">Empezar de cero</button>
+      </footer>
+      <p x-show="legacy.length" class="legacy">
+        <small class="muted">
+          Hay <span x-text="legacy.length"></span> escena(s) guardadas en el equipo por una
+          versión anterior. Ahora las escenas viven como archivos tuyos:
+          <template x-for="s in legacy" :key="s.archivo">
+            <a :href="'/api/scene/legacy/' + s.archivo" download x-text="s.nombre"></a>
+          </template>
+        </small>
+      </p>
+    </article>
+  </dialog>
+
 </div>
+
 
 <script src="/static/calibrate.js?v={{ status.version }}"></script>
 {% endblock %}
