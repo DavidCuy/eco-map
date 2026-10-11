@@ -1,10 +1,14 @@
-"""Escenas como archivos: guardar y abrir una instalacion entera.
+"""La escena es un documento: se abre y se guarda como un archivo.
 
-Una escena deja de ser una fila con nombre y pasa a ser un **documento**. Lo
-que se esta tocando en el dashboard es siempre "la escena actual": se
-autoguarda sola en la base, y aparte se puede guardar con nombre y volver a
-abrir. No hay que crear una escena antes de trabajar, que era lo que el boton
-"+ escena" obligaba a hacer sin explicar por que.
+Lo que se esta tocando en el dashboard es **el documento abierto**. Se
+autoguarda solo en la base, asi que no existe el estado "sin guardar" ni se
+pierde nada si se corta la luz. Guardar escribe una copia **en la computadora
+de quien lo usa**, y abrir trae una de vuelta.
+
+No hay lista de escenas guardadas, a proposito. Un historial al lado del
+documento abierto compite con el: mirando la pantalla deja de estar claro
+sobre cual se esta trabajando. El nombre del documento abierto se muestra
+arriba y alcanza.
 
 El archivo lleva **toda la instalacion**: caras con su malla, capas,
 calibracion y el efecto global. Abrirlo reemplaza todo eso. Es una decision
@@ -331,12 +335,24 @@ def leer(directorio: Path, archivo: str) -> dict[str, Any]:
         raise SnapshotError(f"{archivo} no es un JSON valido: {exc}") from exc
 
 
+def ultimo_respaldo(directorio: Path) -> str | None:
+    """El respaldo mas reciente, para poder deshacer la ultima apertura."""
+    try:
+        respaldos = sorted(directorio.glob(f"{PREFIJO_RESPALDO}*{EXTENSION}"))
+    except OSError:
+        return None
+    return respaldos[-1].name if respaldos else None
+
+
 def respaldar(conn: sqlite3.Connection, directorio: Path) -> str:
     """Guarda el estado actual antes de pisarlo.
 
     Abrir una escena reemplaza las caras y la calibracion. Que eso sea
     reversible no es opcional: recalibrar cuesta veinte minutos y nadie se
     acuerda de respaldar antes.
+
+    Esto **no** es un historial: no se lista ni se navega. Es lo que hace que
+    «deshacer» exista despues de abrir, que es otra cosa.
     """
     marca = datetime.now().strftime("%Y%m%d-%H%M%S")
     guardado = guardar(conn, directorio, f"{PREFIJO_RESPALDO}{marca}")
