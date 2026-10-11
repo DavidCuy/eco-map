@@ -221,3 +221,38 @@ __marimo__/
 
 # Windows: algunos binarios nativos crean este archivo al redirigir a /dev/null
 NUL
+
+# --- efectos subidos desde la web ---
+#
+# Un efecto creado desde /efectos escribe su directorio dentro de `effects/`,
+# y en desarrollo ese directorio es un bind mount al repo: cada imagen, gif o
+# video que se sube aparece como cambio sin seguir. No van al repo. Son
+# contenido de quien lo usa, no del proyecto, y un mp4 de un par de megas no
+# se saca nunca de la historia de git.
+#
+# Se ignora el **directorio entero** y no solo el binario: un efecto a medias
+# —manifiesto versionado, media ignorada— se clona roto y falla recien al
+# proyectarlo, en negro y sin nada que lo explique. Peor que no tenerlo.
+#
+# Los que vienen con el sistema se listan a mano. Es la unica forma sin leer
+# el contenido: lo que distingue a un efecto subido es que su manifiesto
+# declara `source`, y .gitignore no sabe de eso. **Al agregar un efecto nuevo
+# al proyecto hay que agregar tambien su linea aca**, o no se versiona.
+effects/*
+!effects/.gitkeep
+!effects/camera_echo/
+!effects/grid_test/
+!effects/noise_flow/
+!effects/plasma/
+!effects/solid/
+!effects/waves/
+
+# Volumen de media: videos e imagenes que se usan como fuente (`fake://...`).
+# Mismo criterio. `motion_test.mp4` queda versionado a proposito: es material
+# de prueba del proyecto, no de nadie en particular.
+media/*
+!media/.gitkeep
+!media/motion_test.mp4
+
+# Escenas guardadas, si el directorio llega a caer dentro del repo.
+scenes/
